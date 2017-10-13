@@ -5,6 +5,8 @@
 #ifndef IMAGEAPP_UTILS_H
 #define IMAGEAPP_UTILS_H
 
+#include <sys/types.h>
+
 /**
  * Function: abort_with_error
  *

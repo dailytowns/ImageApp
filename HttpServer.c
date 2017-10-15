@@ -1,16 +1,25 @@
 #include <poll.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <ImageMagick-7/MagickWand/MagickWand.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/mman.h>
 
 #include "include/Config.h"
 #include "include/HttpServer.h"
 #include "include/ThreadPool.h"
 #include "include/Utils.h"
 #include "include/Log.h"
+#include "include/Message.h"
+#include "include/HandleDB.h"
+#include "include/Strings.h"
+
+struct thread_pool *thread_pool;
+nfds_t max_descriptor;
+char *file_map;
 
 int main(int argc, char *argv[]) {
 
@@ -20,14 +29,16 @@ int main(int argc, char *argv[]) {
     int ready;                                                                                                          /* Number of ready fd */
     int index;                                                                                                          /* Iterators */
     int ret;
-    nfds_t max_descriptor = 1, d;                                                                                       /* Number of descriptors to be checked */
+    nfds_t d;
+
+    max_descriptor = 1;                                                                                                 /* Number of descriptors to be checked */
 
 
     socklen_t socklen;
     struct sockaddr_in client_addr;
 
     ServerPtr serverPtr = create_server();
-    struct thread_pool *thread_pool = serverPtr->thread_pool;
+    thread_pool = serverPtr->thread_pool;
     struct thread_data *thread_data = thread_pool->td_pool;
 
     /*****************************    Main loop   ***********************************************************/
@@ -66,7 +77,7 @@ int main(int argc, char *argv[]) {
                     conn_sd = accept(serverPtr->listen_sock,
                                      (struct sockaddr *) &client_addr,
                                      &socklen);
-                    abort_with_error("accept()", conn_sd, -1);
+                    abort_with_error("accept()", conn_sd == -1);
 
                     set_socket_options(conn_sd, SO_KEEPALIVE, 0);
 
@@ -86,10 +97,28 @@ int main(int argc, char *argv[]) {
                     release_mutex(&(serverPtr->thread_pool->mtx));
                     /******************************************************************************/
 
-                    write_event_log(serverPtr->log_fp, CONNECTION_ACCEPTED, client_addr);                               /* Keeps track of the client's connection in the log file */
+                    write_event_log(serverPtr->log_fp, CONNECTION_ACCEPTED,
+                                    client_addr);                               /* Keeps track of the client's connection in the log file */
 
                     ret = pthread_create(&(thread_data[nE].tid), NULL, handle_client, &(thread_data[nE]));
-                    if(ret) abort_with_error("pthread_create()\n", 1, 1);
+                    if (ret) abort_with_error("pthread_create()\n", ret != 0);
+
+                } else {                                                                                                /* If the invoked descriptor is not the listening socket, new data have been sent to old socket */
+
+                    pthread_t tid;
+                    int v;
+
+                    get_mutex(&(thread_pool->mtx));
+                    int E = get_E(thread_pool, thread_pool->S, thread_pool->E);
+
+                    thread_data[E].msg_received = 1;                                                                    /* Utile per il timer */
+
+                    printf("\n\nIN ELSE\n\n");
+
+                    v = pthread_create(&tid, NULL, handle_client, &(thread_data[E]));
+                    abort_with_error("pthread_create()", v != 0);
+
+                    continue;
 
                 }
 
@@ -99,28 +128,159 @@ int main(int argc, char *argv[]) {
 
     }
     /**********************************************************************************************************/
+
     return EXIT_SUCCESS;
+}
+
+void get_image_to_send(struct image_t *image) {
+
+    int fd;
+    char *cache_path = NULL;
+    char *image_path = NULL;
+
+    size_t width = 0, height = 0;
+
+    if (image->cache_name != NULL) {
+        cache_path = catenate_strings(IMAGE_CACHE, image->cache_name);
+    }
+    if (image->image_name != NULL)
+        image_path = catenate_strings(IMAGE_DIR, image->image_name);
+
+    /*Search in cache*/
+    int cached = find_file_in_cache(cache_path, file_map);                                                              /* Scan cache of images */
+
+    if(cached) {
+        fd = open_file(cache_path, O_RDONLY);
+        if (fd != -1) {
+            image->file_size = get_file_size(fd);
+            image->fd = fd;
+            return;
+        }
+    } else {
+        fd = open_file(cache_path, O_CREAT | O_RDWR);
+    }
+
+    MagickWand *magickWand = NewMagickWand();
+
+    MagickBooleanType result = MagickReadImage(magickWand, image_path);
+    abort_with_error("MagickReadImage()", result == MagickFalse);
+
+    width = image->width ? (size_t) image->width : MagickGetImageWidth(magickWand);
+    height = image->height ? (size_t) image->height : MagickGetImageHeight(magickWand);
+
+    MagickResetIterator(magickWand);
+    while(MagickNextImage(magickWand) != MagickFalse) {
+        MagickSetImageFormat(magickWand, image->ext);
+        MagickSetCompressionQuality(magickWand, (size_t)(image->image_list[0].q * 100));
+        MagickResizeImage(magickWand, width, height, LanczosFilter);
+    }
+
+    result = MagickWriteImage(magickWand, cache_path);
+    abort_with_error("MagickWriteImage()", result == MagickFalse);
+
+    free(cache_path);
+    free(image_path);
+
+    DestroyMagickWand(magickWand);
+
+    image->file_size = get_file_size(fd);
+
 }
 
 void *handle_client(void *arg) {
 
-    struct thread_data *td = (struct thread_data *)arg;
+    struct thread_data *td = (struct thread_data *) arg;                                                                 /* Cast useful to retrieve struct thread_data's fields*/
+    td->msg_received = 1;                                                                                               /* A message has been received */
+    struct Request *request = create_request();
+    struct image_t *image_info = memory_alloc(sizeof(struct image_t));
 
-    MagickWand *magickWand = NewMagickWand();
+    int status_r, ret;
 
-    MagickReadImage(magickWand, "/home/federico/CLionProjects/Swap/images/meganfox.jpg");
+    while (1) {
 
-    ClearMagickWand(magickWand);
+        get_mutex(&(td->mtx_msg_socket));
+        int idx = td->idx;
+        td->idx = (td->idx + 1) % 5;
+        release_mutex(&(td->mtx_msg_socket));
+
+        td->message[idx] = (char *) memory_alloc(HTTP_MESSAGE_SIZE);
+
+        status_r = receive_message(td, idx);
+
+        switch (status_r) {
+
+            case REQUEST_RECEIVED:                                                                                      /* A request has been sent by the client */
+
+                ret = parse_message(td->message[idx], &request);
+                if (ret == REQUEST_RECEIVED)
+                    printf("user agent: %s\n", request->user_agent);
+                retrieve_from_DB(request,
+                                 td->connDB);                                                                           /* Here is set also the cache name */
+
+                image_info->width = request->width;
+                image_info->height = request->height;
+                image_info->image_name = request->image_name;
+                image_info->image_list = request->image_list;
+                image_info->cache_name = request->cache_name;
+                image_info->ext = request->ext;
+
+                get_image_to_send(image_info);
+
+                free(image_info);
+                free(request);
+                max_descriptor++;
+                break;
+
+            case EMPTY_MESSAGE:                                                                                         /* Generally sent by the browser to check if the server is still alive */
+                //send_empty_response();
+                shutdown(td->conn_sd, SHUT_RDWR);
+                max_descriptor--;
+                pthread_exit(NULL);
+
+            case MESSAGE_NOT_CORRECT:
+                //deal with it
+
+            default:
+                break;
+        }
+
+        get_mutex(&(td->mtx_msg_socket));
+        wait_cond(&(td->cond_msg), &(td->mtx_msg_socket));
+
+        /************** After release condition *****************************/
+
+        if (td->msg_received == 1)
+            continue;
+        else {
+            //operazioni di uscita
+            pthread_exit(NULL);
+        }
+
+        get_mutex(&(thread_pool->mtx));
+        //while (pool->S == pool->E)
+        //    wait_for_free_slot(&(pool->cb_not_empty), &(pool->mtx));
+
+        thread_pool->S = (thread_pool->S + 1) % NUM_THREAD_POOL;
+        signal_cond(&(thread_pool->cb_not_full));
+
+        release_mutex(&(thread_pool->mtx));
+        release_mutex(&(td->mtx_msg_socket));
+
+        thread_pool->td_pool[td->E].conn_sd = -1;
+
+        pthread_exit(NULL);
+
+    }
 
 }
 
 int create_socket() {
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1) {
+    int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_fd == -1) {
         fprintf(stderr, "Error creating the socket\n");
         exit(EXIT_FAILURE);
     }
-    return sockfd;
+    return sock_fd;
 }
 
 void set_socket_options(int sockfd, int keep_alive, int reuse_addr) {
@@ -179,6 +339,29 @@ void init_pollfd(struct Server *serverPtr) {
 
 }
 
+char *get_cache_file() {
+
+    int fd;
+
+    fd = open_file(IMAGE_CACHE_FILE, O_CREAT | O_EXCL | O_RDWR);
+    if(fd != -1) {
+        abort_with_error("lseek()", lseek(fd, SIZE_FILE_LISTCACHE, SEEK_SET) == -1);                                    /* Makes a hole in the file */
+        abort_with_error("write()", write(fd, &fd, 1) != 1);
+    } else {
+        fd = open_file(IMAGE_CACHE_FILE, O_RDWR);
+    }
+
+    char *map = mmap(NULL, SIZE_FILE_LISTCACHE, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    abort_with_error("mmap()", map == MAP_FAILED);
+
+    errno = 0;
+    mlock(map, SIZE_FILE_LISTCACHE);                                                                                    /* Keeps file in memory in order to avoid I/O operations */
+    printf("%s\n", strerror(errno));
+
+    return map;
+
+}
+
 ServerPtr Server() {
     ServerPtr serverPtr = (ServerPtr) memory_alloc(sizeof(struct Server));
     serverPtr->listen_sock = create_socket();
@@ -188,6 +371,7 @@ ServerPtr Server() {
     serverPtr->allocate_pool = allocate_pool;
     serverPtr->set_socket_options = set_socket_options;
     serverPtr->init_pollfd = init_pollfd;
+    //serverPtr->list_file_in_cache = list_file_in_cache;
     return serverPtr;
 }
 
@@ -205,10 +389,12 @@ ServerPtr create_server() {
     }
 
     serverPtr->set_socket_options(serverPtr->listen_sock, 0,
-                                  SO_REUSEADDR);                                             /* It prevents error on bind() for subsequent run of the program */
+                                  SO_REUSEADDR);                                                                        /* It prevents error on bind() for subsequent run of the program */
+
+    set_number_of_connections();                                                                                        /* Allows one connection per thread */
 
     serverPtr->thread_pool = serverPtr->allocate_pool(
-            NUM_THREAD_POOL);                                                 /* Preallocation of NUM_THREAD_POOL threads */
+            NUM_THREAD_POOL);                                                                                           /* Preallocation of NUM_THREAD_POOL threads */
 
     serverPtr->init_pollfd;                                                                                             /* Initialization of the pool of fds that are going to be checked in poll()*/
     serverPtr->array_fd[0].fd = serverPtr->listen_sock;
@@ -217,20 +403,23 @@ ServerPtr create_server() {
 
     serverPtr->log_fp = open_fp(SERVER_LOG_PATH, "a+");
 
-    /*connectToDB();
-    //prepareConnectionDB();
-    init_pollfd();
-    structpollfd[0].fd = serverPtr->listen_sock;
-    structpollfd[0].events = POLLPRI | POLLIN;
+    /* OPERATION NOT PERMITTED
+struct rlimit rlim;
+rlim.rlim_cur = 524288;
+rlim.rlim_max = 524288;
 
-    init_mutex(&image_mtx);
-    int i = -1;
-    while(++i < NUM_THREAD_POOL)
-        init_cond(cond_msg_converted+i);
+errno = 0;
+if(setrlimit(RLIMIT_MEMLOCK, &rlim) == -1)
+    fprintf(stderr, "%s\n", strerror(errno));
 
-    init_buffer_image();*/
+getrlimit(RLIMIT_MEMLOCK, &rlim);
+printf("max mem %ld %ld \n", rlim.rlim_cur, rlim.rlim_max);
+    */
+
+    file_map = get_cache_file();
+
+    //serverPtr->cache_file_map = serverPtr->list_file_in_cache(serverPtr->cache_file_map);
 
     return serverPtr;
-
 }
 

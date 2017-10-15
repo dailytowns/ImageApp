@@ -7,9 +7,9 @@
 
 #define HTTP_MESSAGE_SIZE 512
 
-#define NUM_THREAD_POOL 256
+#define NUM_THREAD_POOL 256                                                                                             /* In MySQL the max_connection-th connection is for root user */
 
-#define MAX_CONNECTION_DB 10
+#define MAX_CONNECTION_DB 258                                                                                           /* 256 + root connection + eventual connection to MySQL workbench*/
 
 #define SERV_PORT	5193
 #define BACKLOG		10
@@ -19,6 +19,13 @@
 #define SERVER_LOG_PATH "/home/federico/CLionProjects/ImageApp/log/logfile"
 #define IMAGE_DIR "/home/federico/CLionProjects/ImageApp/images/"
 #define IMAGE_CACHE "/home/federico/CLionProjects/ImageApp/cache/"
-#define IMAGE_LIST "/home/federico/CLionProjects/ImageApp/imagelist"
+#define IMAGE_LIST "/home/federico/CLionProjects/ImageApp/res/imagelist"
+#define IMAGE_CACHE_FILE "/home/federico/CLionProjects/ImageApp/res/list_cache"
+#define ICON_NAME "zaino.jpg"
+
+#define IMAGE_NAME_PREALLOCATION 64
+#define USERAGENT_PREALLOCATION 128
+
+#define SIZE_FILE_LISTCACHE 65536                   //Maximum amount of memory lockable
 
 #endif //IMAGEAPP_CONFIG_H

@@ -5,9 +5,12 @@
 #ifndef IMAGEAPP_THREADPOOL_H
 #define IMAGEAPP_THREADPOOL_H
 
+#include <mysql.h>
+
 #include "Config.h"
 
 struct thread_data {
+    int *fd;
     int conn_sd;
     char **message;                                     //Deals with (?) pipeline
     pthread_t tid;
@@ -15,19 +18,28 @@ struct thread_data {
     pthread_mutex_t mtx_new_request;
     pthread_cond_t cond_no_msg;
     int idx;
-    int msg_received;
+    int msg_received : 1;
     int E;
     pthread_cond_t cond_msg;
+    MYSQL *connDB;
 };
 
+/**
+ * The pool of threads that is going to be used in the program.
+ * In this case, it is implemented as a ring buffer
+ */
 struct thread_pool {
-    int E;
-    int S;
-    short slot_used[NUM_THREAD_POOL];
-    pthread_mutex_t mtx;
-    pthread_cond_t cb_not_full;
-    pthread_cond_t cb_not_empty;
-    struct thread_data *td_pool;
+    /*@{*/
+    int E;                                                                                                              /**< The end index of the ring buffer */
+    int S;                                                                                                              /**< The start index of the ring buffer */
+    short slot_used[NUM_THREAD_POOL];                                                                                   /**< Array that keeps track of the slots used in the ring buffer */
+    pthread_mutex_t mtx;                                                                                                /**< Mutex useful for mutual exclusive access to the buffer */
+    pthread_cond_t cb_not_full;                                                                                         /**< Condition variable that is used to signal or wait for buffer not full */
+    pthread_cond_t cb_not_empty;                                                                                        /**< Condition variable that is used to signal or wait for buffer not empty */
+    struct thread_data *td_pool;                                                                                        /**< Pointer to the ring buffer */
+
+    int (*get_E)(struct thread_pool *pool, int S, int E);                                                               /**< Function pointer */
+    /*@{*/
 };
 
 /**

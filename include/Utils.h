@@ -6,6 +6,7 @@
 #define IMAGEAPP_UTILS_H
 
 #include <sys/types.h>
+#include <stdio.h>
 
 /**
  * Function: abort_with_error
@@ -14,11 +15,10 @@
  * an error message
  *
  * @param Function that could fail
- * @param returned A value returned by a function
- * @param error_checking The error value returned by a function
+ * @param cond If verified, the program is aborted
  * @return A pointer that points the memory allocated
  */
-void abort_with_error(char *caller, int returned, int error_checking);
+void abort_with_error(char *caller, int cond);
 
 /**
  * Function: memory_alloc
@@ -52,4 +52,47 @@ void image_list();
  * @return A file pointer pointing to the file
  */
 FILE *open_fp(const char *path, const char *mode);
+
+/**
+ * Function: open_file
+ *
+ * It opens a file and checks for error in this operation
+ *
+ * @param path Path of the file to be opened
+ * @param mode It specifies the modality of using the file.
+ * @return A file descriptor of the file
+ */
+int open_file(const char *path, int mode);
+
+/**
+ * Function: parse_int
+ *
+ * It parses a string to an integer
+ *
+ * @param s String to be parsed
+ * @return Integer corresponding to s
+ */
+int parse_int(char *s);
+
+/**
+ * Function: get_file_size
+ *
+ * Computes the size of the file
+ *
+ * @param fd file descriptor
+ * @return file size
+ */
+off_t get_file_size(int fd);
+
+/**
+ * Function: find_file_in_cache
+ *
+ * Scan cache to check if image requested has been
+ * requested before
+ *
+ * @param cache_path Path in cache
+ * @param map mapped file
+ * @return status code
+ */
+int find_file_in_cache(char *cache_path, char *map);
 #endif //IMAGEAPP_UTILS_H

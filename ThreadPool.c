@@ -7,6 +7,7 @@
 
 #include "include/ThreadPool.h"
 #include "include/Utils.h"
+#include "include/HandleDB.h"
 
 struct thread_pool *allocate_pool(int num_threads) {
 
@@ -19,9 +20,14 @@ struct thread_pool *allocate_pool(int num_threads) {
     while (i < num_threads) {
 
         (pool_thread[i]).message = (char **) memory_alloc(5 * sizeof(char *));                                               //Allocated five slots for messages
+        (pool_thread[i]).fd = (int *) memory_alloc(5 * sizeof(int));                                               //Allocated five slots for messages
         (pool_thread[i]).tid = tid;
         (pool_thread[i]).conn_sd = 0;
         (pool_thread[i]).idx = 0;
+
+        printf("i db %d\n", i);
+
+        (pool_thread[i]).connDB = connect_DB();
 
         init_mutex(&((pool_thread[i]).mtx_msg_socket));
         init_mutex(&((pool_thread[i]).mtx_new_request));
@@ -53,6 +59,8 @@ struct thread_pool *allocate_pool(int num_threads) {
     }
     /************************************************************************************************************/
 
+    pool->get_E = get_E;
+
 
     return pool;
 }
@@ -83,7 +91,6 @@ int get_E(struct thread_pool *pool, int S, int E) {
     }
 
 }
-
 
 void get_mutex(pthread_mutex_t *mtx) {
 

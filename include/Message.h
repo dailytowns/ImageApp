@@ -33,6 +33,7 @@ struct image_t {
     char *ext;
     int fd;
     off_t file_size;
+    int cached;
 };
 
 /**

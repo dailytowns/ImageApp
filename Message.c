@@ -389,7 +389,7 @@ int parse_message(char *message, struct Request **request) {
             return MESSAGE_NOT_CORRECT;
         }
 
-        (*request)->ext = strrchr((*request)->image_name, '.') + 1;                                                     /* Extension without the dot */
+        (*request)->ext = strrchr((*request)->image_name, '.');                                                     /* Extension without the dot */
 
         free(first_line);
 

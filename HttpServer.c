@@ -140,16 +140,10 @@ void get_image_to_send(struct image_t *image) {
 
     size_t width = 0, height = 0;
 
-    if (image->cache_name != NULL) {
-        cache_path = catenate_strings(IMAGE_CACHE, image->cache_name);
-    }
     if (image->image_name != NULL)
         image_path = catenate_strings(IMAGE_DIR, image->image_name);
 
-    /*Search in cache*/
-    int cached = find_file_in_cache(cache_path, file_map);                                                              /* Scan cache of images */
-
-    if(cached) {
+    if(image->cached) {
         fd = open_file(cache_path, O_RDONLY);
         if (fd != -1) {
             image->file_size = get_file_size(fd);
@@ -189,7 +183,7 @@ void get_image_to_send(struct image_t *image) {
 
 void *handle_client(void *arg) {
 
-    struct thread_data *td = (struct thread_data *) arg;                                                                 /* Cast useful to retrieve struct thread_data's fields*/
+    struct thread_data *td = (struct thread_data *) arg;                                                                /* Cast useful to retrieve struct thread_data's fields*/
     td->msg_received = 1;                                                                                               /* A message has been received */
     struct Request *request = create_request();
     struct image_t *image_info = memory_alloc(sizeof(struct image_t));
@@ -223,6 +217,14 @@ void *handle_client(void *arg) {
                 image_info->image_list = request->image_list;
                 image_info->cache_name = request->cache_name;
                 image_info->ext = request->ext;
+
+                char *cache_path = NULL;
+                if (image_info->cache_name != NULL) {
+                    cache_path = catenate_strings(IMAGE_CACHE, image_info->cache_name);
+                    cache_path = catenate_strings(cache_path, image_info->ext);
+                }
+                image_info->cached = find_file_in_cache(cache_path, file_map);                                          /* Scan cache of images. One I/O instead of two */
+
 
                 get_image_to_send(image_info);
 

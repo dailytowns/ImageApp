@@ -14,16 +14,18 @@ struct Server {
     struct thread_pool *thread_pool;
     struct pollfd array_fd[NUM_THREAD_POOL];
     FILE *log_fp;
+    char *cache_file_map;
 
-    void (*set_server_address)(struct Server *serverPtr);
+    void (*set_server_address)(struct Server* serverPtr);
     void (*set_socket_options)(int sock_fd, int keep_alive, int reuse_addr);
     void (*bind_address)(int listenSock, struct sockaddr_in serv_addr);
     void (*image_list)();
-    void (*init_pollfd)(struct Server *serverPtr);
+    void (*init_pollfd)(struct Server* serverPtr);
     struct thread_pool *(*allocate_pool)(int num_thr);
+    char *(*list_file_in_cache)(char *map);
 };
 
-typedef struct Server *ServerPtr;
+typedef struct Server* ServerPtr;
 
 /**
  * Function: create_socket

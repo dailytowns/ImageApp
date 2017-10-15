@@ -13,6 +13,8 @@
 #include "include/Config.h"
 #include "include/Utils.h"
 
+enum cache_file {CACHED_IMAGE, NOT_CACHED_IMAGE};
+
 void *memory_alloc(size_t size) {
 
     void *p = NULL;
@@ -137,6 +139,13 @@ off_t get_file_size(int fd) {
 
 int find_file_in_cache(char *cache_path, char *map) {
 
+    size_t len = 0;
 
+    while(len < SIZE_FILE_LISTCACHE) {
+        if(strstr(cache_path, map + len) != NULL)
+            return CACHED_IMAGE;
+        len += 128;
+    }
 
+    return NOT_CACHED_IMAGE;
 }

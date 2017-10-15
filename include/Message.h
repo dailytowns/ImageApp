@@ -34,6 +34,7 @@ struct image_t {
     int fd;
     off_t file_size;
     int cached;
+    char *cache_path;
 };
 
 /**

@@ -20,6 +20,7 @@
 struct thread_pool *thread_pool;
 nfds_t max_descriptor;
 char *file_map;
+size_t seek_cache;
 
 int main(int argc, char *argv[]) {
 
@@ -135,7 +136,6 @@ int main(int argc, char *argv[]) {
 void get_image_to_send(struct image_t *image) {
 
     int fd;
-    char *cache_path = NULL;
     char *image_path = NULL;
 
     size_t width = 0, height = 0;
@@ -144,14 +144,14 @@ void get_image_to_send(struct image_t *image) {
         image_path = catenate_strings(IMAGE_DIR, image->image_name);
 
     if(image->cached) {
-        fd = open_file(cache_path, O_RDONLY);
+        fd = open_file(image->cache_path, O_RDONLY);
         if (fd != -1) {
             image->file_size = get_file_size(fd);
             image->fd = fd;
             return;
         }
     } else {
-        fd = open_file(cache_path, O_CREAT | O_RDWR);
+        fd = open_file(image->cache_path, O_CREAT | O_RDWR);
     }
 
     MagickWand *magickWand = NewMagickWand();
@@ -169,15 +169,16 @@ void get_image_to_send(struct image_t *image) {
         MagickResizeImage(magickWand, width, height, LanczosFilter);
     }
 
-    result = MagickWriteImage(magickWand, cache_path);
+    result = MagickWriteImage(magickWand, image->cache_path);
     abort_with_error("MagickWriteImage()", result == MagickFalse);
 
-    free(cache_path);
     free(image_path);
 
     DestroyMagickWand(magickWand);
 
     image->file_size = get_file_size(fd);
+    memcpy(file_map + seek_cache, image->cache_path, strlen(image->cache_path));
+    seek_cache = (seek_cache + strlen(image->cache_path)) % SIZE_FILE_LISTCACHE;
 
 }
 
@@ -218,13 +219,11 @@ void *handle_client(void *arg) {
                 image_info->cache_name = request->cache_name;
                 image_info->ext = request->ext;
 
-                char *cache_path = NULL;
                 if (image_info->cache_name != NULL) {
-                    cache_path = catenate_strings(IMAGE_CACHE, image_info->cache_name);
-                    cache_path = catenate_strings(cache_path, image_info->ext);
+                    image_info->cache_path = catenate_strings(IMAGE_CACHE, image_info->cache_name);
+                    image_info->cache_path = catenate_strings(image_info->cache_path, image_info->ext);
                 }
-                image_info->cached = find_file_in_cache(cache_path, file_map);                                          /* Scan cache of images. One I/O instead of two */
-
+                image_info->cached = find_file_in_cache(image_info->cache_path, file_map);                                          /* Scan cache of images. One I/O instead of two */
 
                 get_image_to_send(image_info);
 
@@ -419,6 +418,7 @@ printf("max mem %ld %ld \n", rlim.rlim_cur, rlim.rlim_max);
     */
 
     file_map = get_cache_file();
+    seek_cache = 0;
 
     //serverPtr->cache_file_map = serverPtr->list_file_in_cache(serverPtr->cache_file_map);
 

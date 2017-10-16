@@ -6,6 +6,7 @@
 #define IMAGEAPP_THREADPOOL_H
 
 #include <mysql.h>
+#include <netinet/in.h>
 
 #include "Config.h"
 
@@ -18,10 +19,11 @@ struct thread_data {
     pthread_mutex_t mtx_new_request;
     pthread_cond_t cond_no_msg;
     int idx;
-    int msg_received : 1;
+    int msg_received;
     int E;
     pthread_cond_t cond_msg;
     MYSQL *connDB;
+    struct sockaddr_in client_addr;
 };
 
 /**
@@ -124,4 +126,19 @@ void get_mutex(pthread_mutex_t *mtx);
  * @return void
  */
 void release_mutex(pthread_mutex_t *mtx);
+
+/**
+ * Function: find_E_for_fd
+ *
+ * Search in the pool of threads for a connection opened before
+ * and returns its index
+ *
+ * @param pool pool of threads
+ * @param S start index
+ * @param E end index
+ * @param fd file descriptor to be found
+ *
+ * @return index of slot corresponding to the file descriptor
+ */
+int find_E_for_fd(struct thread_pool *pool, int S, int E, int fd);
 #endif //IMAGEAPP_THREADPOOL_H

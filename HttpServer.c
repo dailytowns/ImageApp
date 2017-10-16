@@ -1,4 +1,4 @@
-#include <poll.h>
+#include <sys/poll.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -21,6 +21,9 @@ struct thread_pool *thread_pool;
 nfds_t max_descriptor;
 char *file_map;
 size_t seek_cache;
+FILE *log_fp;
+struct image_t icon;
+struct pollfd array_fd[NUM_THREAD_POOL];
 
 int main(int argc, char *argv[]) {
 
@@ -34,7 +37,6 @@ int main(int argc, char *argv[]) {
 
     max_descriptor = 1;                                                                                                 /* Number of descriptors to be checked */
 
-
     socklen_t socklen;
     struct sockaddr_in client_addr;
 
@@ -45,7 +47,7 @@ int main(int argc, char *argv[]) {
     /*****************************    Main loop   ***********************************************************/
     while (1) {
 
-        ready = poll(serverPtr->array_fd, max_descriptor, 1000);
+        ready = poll(array_fd, max_descriptor, 1000);
 
         switch (ready) {
             case -1:                                                                                                    /* If an error occurs in poll() */
@@ -59,19 +61,19 @@ int main(int argc, char *argv[]) {
             case 0:                                                                                                     /* If no fd is ready to be read */
                 index = 0;
                 while (index < max_descriptor)
-                    printf("descriptor %d %d\n", index, serverPtr->array_fd[index++].fd);
+                    printf("descriptor %d %d\n", index, array_fd[index++].fd);
                 continue;
 
             default:
                 break;
         }
 
-        for (d = 0; d <= max_descriptor; d++) {
+        for (d = 0; d < max_descriptor; d++) {
 
-            if (serverPtr->array_fd[d].revents &
+            if (array_fd[d].revents &
                 POLLIN) {                                                                                               /* If the d-ith descriptor has received bytes to be read */
 
-                if (serverPtr->array_fd[d].fd ==
+                if (array_fd[d].fd ==
                     serverPtr->listen_sock) {                                                                           /* If the descriptor chosen is the listen socket, there is new connection */
 
                     socklen = sizeof(client_addr);
@@ -83,7 +85,7 @@ int main(int argc, char *argv[]) {
                     set_socket_options(conn_sd, SO_KEEPALIVE, 0);
 
                     /**************** Searching for a free slot *************************************/
-                    get_mutex(&(serverPtr->thread_pool->mtx));
+                    get_mutex(&(thread_pool->mtx));
 
                     int nE = get_E(
                             thread_pool,
@@ -92,16 +94,18 @@ int main(int argc, char *argv[]) {
                     thread_pool->E = nE;
                     printf("%d\n", thread_pool->E);
 
-                    thread_pool->td_pool[nE].conn_sd = conn_sd;                                                         /* The rest of assignments are done in allocate_pool() */
+                    thread_pool->td_pool[nE].conn_sd = conn_sd;                                      /* The rest of assignments are done in allocate_pool() */
                     thread_pool->td_pool[nE].E = nE;
+                    thread_pool->td_pool[nE].client_addr = client_addr;
+                    thread_pool->slot_used[nE] = 1;
 
-                    release_mutex(&(serverPtr->thread_pool->mtx));
+                    release_mutex(&(thread_pool->mtx));
                     /******************************************************************************/
 
-                    write_event_log(serverPtr->log_fp, CONNECTION_ACCEPTED,
-                                    client_addr);                               /* Keeps track of the client's connection in the log file */
+                    write_event_log(log_fp, CONNECTION_ACCEPTED,
+                                    client_addr, NULL);                                                                 /* Keeps track of the client's connection in the log file */
 
-                    ret = pthread_create(&(thread_data[nE].tid), NULL, handle_client, &(thread_data[nE]));
+                    ret = pthread_create(&(thread_data[nE].tid), NULL, handle_client, thread_data+nE);
                     if (ret) abort_with_error("pthread_create()\n", ret != 0);
 
                 } else {                                                                                                /* If the invoked descriptor is not the listening socket, new data have been sent to old socket */
@@ -110,19 +114,23 @@ int main(int argc, char *argv[]) {
                     int v;
 
                     get_mutex(&(thread_pool->mtx));
-                    int E = get_E(thread_pool, thread_pool->S, thread_pool->E);
+                    int E = find_E_for_fd(thread_pool, thread_pool->S, thread_pool->E, array_fd[d].fd);
+                    release_mutex(&(thread_pool->mtx));
 
                     thread_data[E].msg_received = 1;                                                                    /* Utile per il timer */
 
                     printf("\n\nIN ELSE\n\n");
 
-                    v = pthread_create(&tid, NULL, handle_client, &(thread_data[E]));
-                    abort_with_error("pthread_create()", v != 0);
+                    //v = pthread_create(&tid, NULL, handle_client, &(thread_data[E]));
+                    //abort_with_error("pthread_create()", v != 0);
+                    signal_cond(&(thread_data[E].cond_msg));
 
                     continue;
 
                 }
 
+            } else if (array_fd[d].revents & POLLPRI) {
+                fprintf(stderr, "POLLPRI\n");
             }
 
         }
@@ -180,6 +188,8 @@ void get_image_to_send(struct image_t *image) {
     memcpy(file_map + seek_cache, image->cache_path, strlen(image->cache_path));
     seek_cache = (seek_cache + strlen(image->cache_path)) % SIZE_FILE_LISTCACHE;
 
+    image->fd = open_file(image->cache_path, O_RDONLY);
+
 }
 
 void *handle_client(void *arg) {
@@ -190,51 +200,59 @@ void *handle_client(void *arg) {
     struct image_t *image_info = memory_alloc(sizeof(struct image_t));
 
     int status_r, ret;
+    max_descriptor++;
+    array_fd[td->E].fd = td->conn_sd;
 
     while (1) {
 
         get_mutex(&(td->mtx_msg_socket));
         int idx = td->idx;
         td->idx = (td->idx + 1) % 5;
-        release_mutex(&(td->mtx_msg_socket));
+
 
         td->message[idx] = (char *) memory_alloc(HTTP_MESSAGE_SIZE);
 
         status_r = receive_message(td, idx);
+        release_mutex(&(td->mtx_msg_socket));
 
         switch (status_r) {
 
             case REQUEST_RECEIVED:                                                                                      /* A request has been sent by the client */
 
                 ret = parse_message(td->message[idx], &request);
-                if (ret == REQUEST_RECEIVED)
+                if (ret == REQUEST_RECEIVED) {
                     printf("user agent: %s\n", request->user_agent);
-                retrieve_from_DB(request,
-                                 td->connDB);                                                                           /* Here is set also the cache name */
 
-                image_info->width = request->width;
-                image_info->height = request->height;
-                image_info->image_name = request->image_name;
-                image_info->image_list = request->image_list;
-                image_info->cache_name = request->cache_name;
-                image_info->ext = request->ext;
+                    retrieve_from_DB(request,
+                                     td->connDB);                                                                           /* Here is set also the cache name */
 
-                if (image_info->cache_name != NULL) {
-                    image_info->cache_path = catenate_strings(IMAGE_CACHE, image_info->cache_name);
-                    image_info->cache_path = catenate_strings(image_info->cache_path, image_info->ext);
-                }
-                image_info->cached = find_file_in_cache(image_info->cache_path, file_map);                                          /* Scan cache of images. One I/O instead of two */
+                    image_info->width = request->width;
+                    image_info->height = request->height;
+                    image_info->image_name = request->image_name;
+                    image_info->image_list = request->image_list;
+                    image_info->cache_name = request->cache_name;
+                    image_info->ext = request->ext;
 
-                get_image_to_send(image_info);
+                    if (image_info->cache_name != NULL) {
+                        image_info->cache_path = catenate_strings(IMAGE_CACHE, image_info->cache_name);
+                        image_info->cache_path = catenate_strings(image_info->cache_path, image_info->ext);
+                    }
+                    image_info->cached = find_file_in_cache(image_info->cache_path,
+                                                            file_map);                              /* Scan cache of images. One I/O instead of two */
 
-                free(image_info);
-                free(request);
-                max_descriptor++;
+                    write_event_log(log_fp, LOG_IMAGE_REQUESTED,
+                                    td->client_addr, image_info);
+
+                    get_image_to_send(image_info);
+
+                    int v = send_image(td->conn_sd, image_info);
+                } else if (ret == ICON_REQUESTED)
+                    send_image(td->conn_sd, &icon);
+
                 break;
 
-            case EMPTY_MESSAGE:                                                                                         /* Generally sent by the browser to check if the server is still alive */
-                //send_empty_response();
-                shutdown(td->conn_sd, SHUT_RDWR);
+            case EMPTY_MESSAGE:
+                thread_pool->slot_used[td->E] = 0;
                 max_descriptor--;
                 pthread_exit(NULL);
 
@@ -247,29 +265,27 @@ void *handle_client(void *arg) {
 
         get_mutex(&(td->mtx_msg_socket));
         wait_cond(&(td->cond_msg), &(td->mtx_msg_socket));
+        release_mutex(&(td->mtx_msg_socket));
 
         /************** After release condition *****************************/
 
-        if (td->msg_received == 1)
+        /*if (td->msg_received == 1)
             continue;
         else {
             //operazioni di uscita
+            free(image_info);
+            free(request);
             pthread_exit(NULL);
-        }
+        }*/
 
-        get_mutex(&(thread_pool->mtx));
+        //get_mutex(&(thread_pool->mtx));
         //while (pool->S == pool->E)
         //    wait_for_free_slot(&(pool->cb_not_empty), &(pool->mtx));
 
-        thread_pool->S = (thread_pool->S + 1) % NUM_THREAD_POOL;
-        signal_cond(&(thread_pool->cb_not_full));
+        //thread_pool->S = (thread_pool->S + 1) % NUM_THREAD_POOL;
+        //signal_cond(&(thread_pool->cb_not_full));
 
-        release_mutex(&(thread_pool->mtx));
-        release_mutex(&(td->mtx_msg_socket));
-
-        thread_pool->td_pool[td->E].conn_sd = -1;
-
-        pthread_exit(NULL);
+        //release_mutex(&(thread_pool->mtx));
 
     }
 
@@ -328,13 +344,13 @@ void bind_address(int listen_sock, struct sockaddr_in serv_addr) {
     }
 }
 
-void init_pollfd(struct Server *serverPtr) {
+void init_pollfd() {
 
     int i = 0;
 
     while (i < NUM_THREAD_POOL) {
-        serverPtr->array_fd[i].fd = -1;
-        serverPtr->array_fd[i].events = POLLIN | POLLPRI;
+        array_fd[i].fd = -1;
+        array_fd[i].events = POLLIN | POLLPRI;
         i++;
     }
 
@@ -397,12 +413,12 @@ ServerPtr create_server() {
     serverPtr->thread_pool = serverPtr->allocate_pool(
             NUM_THREAD_POOL);                                                                                           /* Preallocation of NUM_THREAD_POOL threads */
 
-    serverPtr->init_pollfd;                                                                                             /* Initialization of the pool of fds that are going to be checked in poll()*/
-    serverPtr->array_fd[0].fd = serverPtr->listen_sock;
-    serverPtr->array_fd[0].events = POLLIN | POLLPRI;
+    serverPtr->init_pollfd();                                                                                             /* Initialization of the pool of fds that are going to be checked in poll()*/
+    array_fd[0].fd = serverPtr->listen_sock;
+    array_fd[0].events = POLLIN | POLLPRI;
     serverPtr->thread_pool->slot_used[0] = 1;
 
-    serverPtr->log_fp = open_fp(SERVER_LOG_PATH, "a+");
+    log_fp = open_fp(SERVER_LOG_PATH, "a+");
 
     /* OPERATION NOT PERMITTED
 struct rlimit rlim;
@@ -420,7 +436,11 @@ printf("max mem %ld %ld \n", rlim.rlim_cur, rlim.rlim_max);
     file_map = get_cache_file();
     seek_cache = 0;
 
-    //serverPtr->cache_file_map = serverPtr->list_file_in_cache(serverPtr->cache_file_map);
+    /******************** Icon ****************************/
+    icon.fd = open_file(ICON_PATH, O_RDONLY);
+    icon.image_name = ICON_PATH;
+    //icon.file_size = get_file_size(icon.fd);
+    /*****************************************************/
 
     return serverPtr;
 }

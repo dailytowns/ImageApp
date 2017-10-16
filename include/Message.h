@@ -9,7 +9,9 @@
 #include "Message.h"
 #include "HandleImage.h"
 
-enum msg_stat {REQUEST_RECEIVED, EMPTY_MESSAGE, CONNECTION_CLOSED};
+enum extension {ALL_EXT, JPG, PNG};
+
+enum msg_stat {REQUEST_RECEIVED, EMPTY_MESSAGE, ERROR_SENDING_MESSAGE, CONNECTION_CLOSED};
 
 enum rqst_stat {OK, ICON_REQUESTED, IMAGE_REQUESTED, MESSAGE_NOT_CORRECT, REQUEST_TOO_LONG};
 
@@ -36,6 +38,8 @@ struct image_t {
     int cached;
     char *cache_path;
 };
+
+int send_image(int conn_sd, struct image_t *image);
 
 /**
  * Function: create_request

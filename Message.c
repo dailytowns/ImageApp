@@ -6,11 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/sendfile.h>
 
 #include "include/Message.h"
 #include "include/Config.h"
 #include "include/Utils.h"
 #include "include/HandleImage.h"
+#include "include/Strings.h"
 
 struct Request *create_request() {
 
@@ -75,7 +77,8 @@ int receive_message(struct thread_data *td, int idx) {
                 // connection closed
                 printf("selectserver: socket %d hung up\n", td->conn_sd);
 
-                //close(td->conn_sd);                                                                                     /* Both cause of error or closed connection, bye! */
+                shutdown(td->conn_sd, SHUT_RDWR);
+                close(td->conn_sd);                                                                                     /* Both cause of error or closed connection, bye! */
 
                 return EMPTY_MESSAGE;
 
@@ -323,8 +326,14 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
         if (token1 != NULL) {
             if (strstr(token1, "image/") != NULL && token2 == NULL) {
                 if (strcmp(token1, "image/*") == 0) {
-                    //setta qualsiasi estensione
+                    buf_im_list[i].extension = ALL_EXT;
                 }
+                if(strstr(token1, "jpg") != NULL)
+                    buf_im_list[i].extension = JPG;
+                if(strstr(token1, "jpeg") != NULL)
+                    buf_im_list[i].extension = JPG;
+                if(strstr(token1, "png") != NULL)
+                    buf_im_list[i].extension = PNG;
                 buf_im_list[i].q = 1.0;
                 printf("quality %f\n", buf_im_list[i].q);
                 i++;
@@ -335,6 +344,7 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
                     buf_im_list[i].q = strtof(token2 + 3, &s);
                     if(!buf_im_list[i].q)
                         buf_im_list[i].q = 0.8;
+                    buf_im_list[i].extension = ALL_EXT;
                     i++;
                     continue;
                 }
@@ -350,6 +360,12 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
             fprintf(stderr, "Error in strtof\n");
             buf_im_list[i].q = 0.8;
         }
+        if(strstr(token1, "jpg") != NULL)
+            buf_im_list[i].extension = JPG;
+        if(strstr(token1, "jpeg") != NULL)
+            buf_im_list[i].extension = JPG;
+        if(strstr(token1, "png") != NULL)
+            buf_im_list[i].extension = PNG;
 
         i++;
 
@@ -384,12 +400,13 @@ int parse_message(char *message, struct Request **request) {
         ret = parse_name(first_line, &((*request)->image_name));
         if (ret == ICON_REQUESTED) {
             (*request)->image_name = ICON_NAME;
+            return ICON_REQUESTED;
         } else if (ret == MESSAGE_NOT_CORRECT) {
             free(first_line);
             return MESSAGE_NOT_CORRECT;
         }
 
-        (*request)->ext = strrchr((*request)->image_name, '.');                                                     /* Extension without the dot */
+        (*request)->ext = strrchr((*request)->image_name, '.');                                                         /* Extension of the image in the URL */
 
         free(first_line);
 
@@ -410,6 +427,103 @@ int parse_message(char *message, struct Request **request) {
 
     } else if (ret == REQUEST_TOO_LONG) {
         //Deal with it
+    }
+
+    return OK;
+}
+
+size_t build_message(off_t file_size, char *extension, char **msg) {
+
+    size_t len = 0;
+
+    char *char_size = convert_long_to_string(file_size);
+
+    printf("in buiiiiiiild message %s\n", extension);
+
+    memcpy(*msg, "HTTP/1.1 200 OK", strlen("HTTP/1.1 200 OK"));
+    len += strlen("HTTP/1.1 200 OK");
+    memcpy(*msg + len, "\r\n", strlen("\r\n"));
+    len += strlen("\r\n");
+
+    memcpy(*msg + len, "Server: 127.0.0.1", strlen("Server: 127.0.0.1"));
+    len += strlen("Server: 127.0.0.1");
+    memcpy(*msg + len, "\r\n", strlen("\r\n"));
+    len += strlen("\r\n");
+
+    memcpy(*msg + len, "Content-Type: image/", strlen("content-type: image/"));
+    len += strlen("Content-Type: image/");
+    //*msg = catenate_strings(tmp_msg, ext);
+    /*while (i < strlen(ext)) {
+        *((*msg) + len + i) = ext[i];
+        i++;
+    }
+    len += strlen(ext);*/
+    memcpy(*msg + len, "jpeg", strlen("jpeg"));
+    len += strlen("jpeg");
+    memcpy(*msg + len, "\r\n", strlen("\r\n"));
+    len += strlen("\r\n");
+
+    memcpy(*msg + len, "Content-Transfer-Encoding: binary", strlen("Content-Transfer-Encoding: binary"));
+    len += strlen("Content-Transfer-Encoding: binary");
+    memcpy(*msg + len, "\r\n", strlen("\r\n"));
+    len += strlen("\r\n");
+
+    memcpy(*msg + len, "Content-Length: ", strlen("Content-Length: "));
+    len += strlen("Content-Length: ");
+    memcpy(*msg + len, char_size, strlen(char_size));
+    len += strlen(char_size);
+    memcpy(*msg + len, "\r\n", strlen("\r\n"));
+    len += strlen("\r\n");
+
+    memcpy(*msg + len, "Connection: Keep-Alive", strlen("Connection: Keep-Alive"));
+    len += strlen("Connection: Keep-Alive");
+    memcpy(*msg + len, "\r\n\r\n", strlen("\r\n\r\n"));
+    len += strlen("\r\n\r\n");
+
+    printf("message built %s\n\n", *msg);
+
+    return len;
+}
+
+int send_image(int conn_sd, struct image_t *image) {
+
+    char *msg = NULL;
+    msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
+    msg[511] = '\0';
+
+    size_t len_header = build_message(image->file_size, image->ext, &msg);
+    ssize_t s = 0;
+    size_t sent = 0;
+
+    /************ Send headers **********************/
+    while (sent < len_header) {
+
+        s = send(conn_sd, msg + sent, strlen(msg), MSG_MORE);
+
+        if (s == -1) {
+            fprintf(stderr, "Error in send()\n");
+            return ERROR_SENDING_MESSAGE;
+        }
+
+        sent += s;
+    }
+    /********************************************/
+
+    int retry = 5;
+
+    ssize_t v = 0;
+
+    while (retry > 0) {
+        v = sendfile(conn_sd, image->fd, NULL, (size_t) image->file_size);
+        if (v == -1) {
+            fprintf(stderr, "Error in sendfile()\n");
+            return ERROR_SENDING_MESSAGE;
+        } else if (v != image->file_size) {
+            fprintf(stderr, "Image sent not correctly\n");
+            retry--;
+            continue;
+        } else if (v == image->file_size)
+            break;
     }
 
     return OK;

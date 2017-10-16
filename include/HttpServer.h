@@ -19,7 +19,7 @@ struct Server {
     void (*set_socket_options)(int sock_fd, int keep_alive, int reuse_addr);
     void (*bind_address)(int listenSock, struct sockaddr_in serv_addr);
     void (*image_list)();
-    void (*init_pollfd)(struct Server* serverPtr);
+    void (*init_pollfd)();
     struct thread_pool *(*allocate_pool)(int num_thr);
 };
 

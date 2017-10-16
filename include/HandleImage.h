@@ -8,6 +8,7 @@
 struct image_node_t {
     char *type;
     float q;
+    int extension;
 };
 
 typedef struct image_node_t ImageNode;

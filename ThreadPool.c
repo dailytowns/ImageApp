@@ -19,8 +19,8 @@ struct thread_pool *allocate_pool(int num_threads) {
     /* Initializes every struct thread_data that are to be in the pool */
     while (i < num_threads) {
 
-        (pool_thread[i]).message = (char **) memory_alloc(5 * sizeof(char *));                                               //Allocated five slots for messages
-        (pool_thread[i]).fd = (int *) memory_alloc(5 * sizeof(int));                                               //Allocated five slots for messages
+        (pool_thread[i]).message = (char **) memory_alloc(5 * sizeof(char *));                                          //Allocated five slots for messages
+        (pool_thread[i]).fd = (int *) memory_alloc(5 * sizeof(int));                                                    //Allocated five slots for messages
         (pool_thread[i]).tid = tid;
         (pool_thread[i]).conn_sd = 0;
         (pool_thread[i]).idx = 0;
@@ -61,8 +61,29 @@ struct thread_pool *allocate_pool(int num_threads) {
 
     pool->get_E = get_E;
 
+    i = 0;
+    while(i < num_threads) {
+        pool->slot_used[i] = 0;
+        i++;
+    }
 
     return pool;
+}
+
+int find_E_for_fd(struct thread_pool *pool, int S, int E, int fd) {
+
+    int i = 0;
+
+    while(i < NUM_THREAD_POOL) {
+
+        if(pool->slot_used[i] == 1 && (pool->td_pool[i].conn_sd == fd))
+            return i;
+        i++;
+    }
+
+    if(i == NUM_THREAD_POOL)
+        return CONNECTION_CLOSED;
+
 }
 
 int get_E(struct thread_pool *pool, int S, int E) {

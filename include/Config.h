@@ -21,7 +21,9 @@
 #define IMAGE_CACHE "/home/federico/CLionProjects/ImageApp/cache/"
 #define IMAGE_LIST "/home/federico/CLionProjects/ImageApp/res/imagelist"
 #define IMAGE_CACHE_FILE "/home/federico/CLionProjects/ImageApp/res/list_cache"
-#define ICON_NAME "zaino.jpg"
+#define ICON_PATH "/home/federico/CLionProjects/ImageApp/images/favicon.ico"
+
+#define ICON_NAME "favicon.ico"
 
 #define IMAGE_NAME_PREALLOCATION 64
 #define USERAGENT_PREALLOCATION 128

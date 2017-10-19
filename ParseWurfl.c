@@ -6,7 +6,6 @@
 #include <mysql.h>
 #include <libxml/parser.h>
 #include <stdio.h>
-#include <libxml/parser.h>
 #include <libxml/tree.h>
 #include <string.h>
 #include <sys/types.h>
@@ -189,18 +188,16 @@ void populate_db(xmlNode *a_node, MYSQL *conn) {
 
 }
 
-MYSQL *connect_DB(char *database) {
+MYSQL *connect_DB(char *user, char *password, char *database) {
 
     char *server = "localhost";
-    char *user = "root";
-    char *password = "portento123";
 
     MYSQL *conn = mysql_init(NULL);
 
     /* Connect to database */
     if (!mysql_real_connect(conn, server, user, password, database, 3306, NULL, 0)) {
         fprintf(stderr, "%s\n", mysql_error(conn));
-        exit(EXIT_FAILURE);
+        //exit(EXIT_FAILURE);
     }
 
     return conn;
@@ -209,7 +206,13 @@ MYSQL *connect_DB(char *database) {
 
 int main() {
 
-    MYSQL *conn = connect_DB(NULL);
+    MYSQL *conn = connect_DB("root", "portento123", "sys");                                                             /* The password has to be taken from the configuration file */
+
+    /*if (mysql_query(conn, "CREATE USER 'test_user'@'localhost' IDENTIFIED BY 'password';")) {
+        fprintf(stderr, "%s\n", mysql_error(conn));
+        //mysql_close(conn);
+        //exit(1);
+    }*/
 
     if (mysql_query(conn, "CREATE DATABASE devicedb;")) {
         fprintf(stderr, "%s\n", mysql_error(conn));
@@ -219,7 +222,7 @@ int main() {
 
     mysql_close(conn);
 
-    conn = connect_DB("devicedb");
+    conn = connect_DB("root", "portento123", "devicedb");
 
     if (mysql_query(conn, "DROP TABLE IF EXISTS device;")) {
         mysql_errno(conn);

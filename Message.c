@@ -163,6 +163,8 @@ int parse_name(char *line, char **image_name) {
                 p[j] = '\0';
                 break;
 
+            } else if(line[i + 1] == ' ') {
+                return EMPTY_PATH;
             } else {
 
                 if (strstr(line, "favicon") != NULL) return ICON_REQUESTED;                                             /* If ? not present, try to check if the icon is requested*/
@@ -398,8 +400,9 @@ int parse_message(char *message, struct Request **request) {
     if (ret == OK) {
 
         ret = parse_name(first_line, &((*request)->image_name));
-        if (ret == ICON_REQUESTED) {
+        if (ret == ICON_REQUESTED || ret == EMPTY_PATH) {
             (*request)->image_name = ICON_NAME;
+            free(first_line);
             return ICON_REQUESTED;
         } else if (ret == MESSAGE_NOT_CORRECT) {
             free(first_line);

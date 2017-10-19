@@ -151,7 +151,7 @@ void get_image_to_send(struct image_t *image) {
     if (image->image_name != NULL)
         image_path = catenate_strings(IMAGE_DIR, image->image_name);
 
-    if(image->cached) {
+    if(image->cached == CACHED_IMAGE) {
         fd = open_file(image->cache_path, O_RDONLY);
         if (fd != -1) {
             image->file_size = get_file_size(fd);
@@ -171,7 +171,7 @@ void get_image_to_send(struct image_t *image) {
     height = image->height ? (size_t) image->height : MagickGetImageHeight(magickWand);
 
     MagickResetIterator(magickWand);
-    while(MagickNextImage(magickWand) != MagickFalse) {
+    while(MagickNextImage(magickWand) == MagickFalse) {
         MagickSetImageFormat(magickWand, image->ext);
         MagickSetCompressionQuality(magickWand, (size_t)(image->image_list[0].q * 100));
         MagickResizeImage(magickWand, width, height, LanczosFilter);
@@ -185,7 +185,7 @@ void get_image_to_send(struct image_t *image) {
     DestroyMagickWand(magickWand);
 
     image->file_size = get_file_size(fd);
-    memcpy(file_map + seek_cache, image->cache_path, strlen(image->cache_path));
+    memcpy(file_map + seek_cache, image->cache_path, 128);
     seek_cache = (seek_cache + strlen(image->cache_path)) % SIZE_FILE_LISTCACHE;
 
     image->fd = open_file(image->cache_path, O_RDONLY);
@@ -246,14 +246,19 @@ void *handle_client(void *arg) {
                     get_image_to_send(image_info);
 
                     int v = send_image(td->conn_sd, image_info);
-                } else if (ret == ICON_REQUESTED)
+                } else if (ret == ICON_REQUESTED) {
+                    icon.fd = open_file(ICON_PATH, O_RDONLY);
+                    icon.file_size = get_file_size(icon.fd);
                     send_image(td->conn_sd, &icon);
+                }
 
                 break;
 
             case EMPTY_MESSAGE:
                 thread_pool->slot_used[td->E] = 0;
                 max_descriptor--;
+                shutdown(td->conn_sd, SHUT_RDWR);
+                close(td->conn_sd);
                 pthread_exit(NULL);
 
             case MESSAGE_NOT_CORRECT:

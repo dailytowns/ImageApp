@@ -111,7 +111,7 @@ void set_number_of_connections() {
     char *server = "localhost";
     char *user = "root";
     char *password = "portento123";
-    char *database = "DB";
+    char *database = "devicedb";
 
     MYSQL *conn = mysql_init(NULL);
 
@@ -150,7 +150,7 @@ MYSQL *connect_DB() {
     char *server = "localhost";
     char *user = "root";
     char *password = "portento123";
-    char *database = "DB";
+    char *database = "devicedb";
 
     MYSQL *conn = mysql_init(NULL);
 

@@ -8,6 +8,8 @@
 #include <sys/types.h>
 #include <stdio.h>
 
+enum cache_file {CACHED_IMAGE, NOT_CACHED_IMAGE};
+
 /**
  * Function: abort_with_error
  *

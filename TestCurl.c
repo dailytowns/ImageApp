@@ -4,9 +4,10 @@
 
 #include <stdio.h>
 #include <curl/curl.h>
+#include <pthread.h>
+#include <stdlib.h>
 
-int main(void)
-{
+void *job(void *arg){
     CURL *curl;
     CURLcode res;
 
@@ -30,6 +31,7 @@ int main(void)
         res = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
 
         curl_easy_setopt(curl, CURLOPT_URL, "localhost:5193/?Blue-Water.jpg");
+
         res = curl_easy_perform(curl);
 
         if(CURLE_OK == res) {
@@ -45,4 +47,27 @@ int main(void)
         curl_easy_cleanup(curl);
     }
     return 0;
+}
+
+int main() {
+
+    int i=0;
+    pthread_t tid[10];
+
+    while(i < 10) {
+        if(pthread_create(tid+i, NULL, job, NULL) != 0) {
+            fprintf(stderr, "Error in ptheoifvn\n");
+        }
+        i++;
+    }
+
+    int j = 0;
+    while(j<10) {
+        if(pthread_join(tid[j], NULL) != 0) {
+            break;
+        }
+        j++;
+    }
+
+    return EXIT_SUCCESS;
 }

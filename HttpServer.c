@@ -199,7 +199,7 @@ void *handle_client(void *arg) {
     struct Request *request = create_request();
     struct image_t *image_info = memory_alloc(sizeof(struct image_t));
 
-    int status_r, ret;
+    int status_r, ret, v;
     max_descriptor++;
     array_fd[td->E].fd = td->conn_sd;
 
@@ -245,11 +245,12 @@ void *handle_client(void *arg) {
 
                     get_image_to_send(image_info);
 
-                    int v = send_image(td->conn_sd, image_info);
+                    v = send_image(td->conn_sd, image_info, request->cmd);
+
                 } else if (ret == ICON_REQUESTED) {
                     icon.fd = open_file(ICON_PATH, O_RDONLY);
                     icon.file_size = get_file_size(icon.fd);
-                    send_image(td->conn_sd, &icon);
+                    send_image(td->conn_sd, &icon, GET_CMD);
                 }
 
                 break;

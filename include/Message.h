@@ -11,6 +11,8 @@
 
 enum extension {ALL_EXT, JPG, PNG};
 
+enum cmd {GET_CMD, HEAD_CMD};
+
 enum msg_stat {REQUEST_RECEIVED, EMPTY_MESSAGE, ERROR_SENDING_MESSAGE, CONNECTION_CLOSED};
 
 enum rqst_stat {OK, ICON_REQUESTED, IMAGE_REQUESTED, MESSAGE_NOT_CORRECT, REQUEST_TOO_LONG, EMPTY_PATH};
@@ -39,7 +41,17 @@ struct image_t {
     char *cache_path;
 };
 
-int send_image(int conn_sd, struct image_t *image);
+/**
+ * Function: send_image
+ *
+ * It sends the image to the client
+ *
+ * @param conn_sd Socket of the connection
+ * @param image struct of the image to be sent
+ * @param cmd Set to GET_CMD or HEAD_CMD
+ * @return Error status
+ */
+int send_image(int conn_sd, struct image_t *image, int cmd);
 
 /**
  * Function: create_request
@@ -67,6 +79,7 @@ int receive_message(struct thread_data *td, int idx);
  * It parses the message received from the client and sets all the fields of a struct Request that is returned
  *
  * @param message Message received
+ * @param request Request of the client
  * @return Error status
  */
 int parse_message(char *message, struct Request **request);

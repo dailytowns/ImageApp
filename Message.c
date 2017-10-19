@@ -91,7 +91,7 @@ int receive_message(struct thread_data *td, int idx) {
 
 }
 
-int get_first_line(const char *message, char **firstline) {
+int get_command_line(const char *message, char **firstline) {
 
     int i = 0;
     size_t size = 128;
@@ -388,6 +388,24 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
     //order_list(image_list);
 }
 
+void parse_command(char *first_line, int *cmd) {
+
+    int i = 0;
+
+    while(i < strlen(first_line)) {
+        if(strncmp(first_line + i, "GET", 3) == 0) {
+            *cmd = GET_CMD;
+            return;
+        } else if (strncmp(first_line + i, "HEAD", 4) == 0) {
+            *cmd = HEAD_CMD;
+            return;
+        }
+        i++;
+    }
+
+    *cmd = MESSAGE_NOT_CORRECT;
+}
+
 int parse_message(char *message, struct Request **request) {
 
     *request = create_request();
@@ -396,8 +414,10 @@ int parse_message(char *message, struct Request **request) {
     char *first_line = NULL;
     struct image_node_t *list = NULL;
 
-    ret = get_first_line(message, &first_line);
+    ret = get_command_line(message, &first_line);
     if (ret == OK) {
+
+        parse_command(first_line, &((*request)->cmd));
 
         ret = parse_name(first_line, &((*request)->image_name));
         if (ret == ICON_REQUESTED || ret == EMPTY_PATH) {
@@ -488,7 +508,7 @@ size_t build_message(off_t file_size, char *extension, char **msg) {
     return len;
 }
 
-int send_image(int conn_sd, struct image_t *image) {
+int send_image(int conn_sd, struct image_t *image, int cmd) {
 
     char *msg = NULL;
     msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
@@ -512,21 +532,23 @@ int send_image(int conn_sd, struct image_t *image) {
     }
     /********************************************/
 
-    int retry = 5;
+    if(cmd == GET_CMD) {
+        int retry = 5;
 
-    ssize_t v = 0;
+        ssize_t v = 0;
 
-    while (retry > 0) {
-        v = sendfile(conn_sd, image->fd, NULL, (size_t) image->file_size);
-        if (v == -1) {
-            fprintf(stderr, "Error in sendfile()\n");
-            return ERROR_SENDING_MESSAGE;
-        } else if (v != image->file_size) {
-            fprintf(stderr, "Image sent not correctly\n");
-            retry--;
-            continue;
-        } else if (v == image->file_size)
-            break;
+        while (retry > 0) {
+            v = sendfile(conn_sd, image->fd, NULL, (size_t) image->file_size);
+            if (v == -1) {
+                fprintf(stderr, "Error in sendfile()\n");
+                return ERROR_SENDING_MESSAGE;
+            } else if (v != image->file_size) {
+                fprintf(stderr, "Image sent not correctly\n");
+                retry--;
+                continue;
+            } else if (v == image->file_size)
+                break;
+        }
     }
 
     return OK;

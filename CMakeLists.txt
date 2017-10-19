@@ -6,13 +6,17 @@ set(CMAKE_C_STANDARD 90)
 set(SOURCE_FILES HttpServer.c Utils.c ThreadPool.c Log.c Message.c
                 HandleImage.c HandleDB.c Strings.c treexml.pgc include)
 set(SOURCE_FILES_XML ParseWurfl.c Utils.c)
+set(TEST TestCurl.c)
 
 add_executable(httpserver ${SOURCE_FILES})
 
 add_executable(ParseWurfl ${SOURCE_FILES_XML})
 
-target_link_libraries(httpserver pthread)
+add_executable(TEST TestCurl.c)
+target_link_libraries(TEST curl)
 
+target_link_libraries(httpserver pthread)
+target_link_libraries(TEST pthread)
 
 ###### PkgConfig ########
 find_package(PkgConfig)

@@ -23,6 +23,7 @@ struct Request {
     int cmd;
     char *user_agent;
     char *image_name;
+    char *image_path;
     ImageNode *image_list;
     char *cache_name;
     char *ext;
@@ -39,6 +40,7 @@ struct image_t {
     off_t file_size;
     int cached;
     char *cache_path;
+    char *image_path;
 };
 
 /**

@@ -35,19 +35,18 @@ int remove_extension(char *name) {
 
 void build_image_name_cache(char **buf, char *name, float quality, int width, int height) {
 
-    int v = remove_extension(name);
+    size_t v = strlen(name);
     char *filename = NULL;
     if (v > 0) {
         filename = (char *) memory_alloc(v * sizeof(char));
         memcpy(filename, name, v);
-        filename[v - 1] = '\0';
-    } else
-        filename = name;
+        filename[v] = '\0';
+    }
 
     *buf = memory_alloc((v +
                          sizeof(quality) +
                          sizeof(height) +
-                         sizeof(width)) * sizeof(char));
+                         sizeof(width) + 1) * sizeof(char));
     sprintf(*buf, "%s%f%d%d", filename, quality, width, height);
 
     free(filename);

@@ -148,8 +148,10 @@ void get_image_to_send(struct image_t *image) {
 
     size_t width = 0, height = 0;
 
-    if (image->image_name != NULL)
+    if (image->image_name != NULL) {
         image_path = catenate_strings(IMAGE_DIR, image->image_name);
+        image_path = catenate_strings(image_path, image->ext);
+    }
 
     if(image->cached == CACHED_IMAGE) {
         fd = open_file(image->cache_path, O_RDONLY);
@@ -165,7 +167,12 @@ void get_image_to_send(struct image_t *image) {
     MagickWand *magickWand = NewMagickWand();
 
     MagickBooleanType result = MagickReadImage(magickWand, image_path);
-    abort_with_error("MagickReadImage()", result == MagickFalse);
+    if(result == MagickFalse && !strcmp(image->ext, ".jpg")) {
+        image_path = catenate_strings(IMAGE_DIR, image->image_name);
+        image_path = catenate_strings(image_path, ".jpeg");
+        result = MagickReadImage(magickWand, image_path);
+        abort_with_error("MagickWriteImage()", result == MagickFalse);
+    }
 
     width = image->width ? (size_t) image->width : MagickGetImageWidth(magickWand);
     height = image->height ? (size_t) image->height : MagickGetImageHeight(magickWand);
@@ -178,7 +185,7 @@ void get_image_to_send(struct image_t *image) {
     }
 
     result = MagickWriteImage(magickWand, image->cache_path);
-    abort_with_error("MagickWriteImage()", result == MagickFalse);
+    abort_with_error("MagickWriteImage", result == MagickFalse);
 
     free(image_path);
 
@@ -237,8 +244,11 @@ void *handle_client(void *arg) {
                         image_info->cache_path = catenate_strings(IMAGE_CACHE, image_info->cache_name);
                         image_info->cache_path = catenate_strings(image_info->cache_path, image_info->ext);
                     }
+                    if(image_info->image_name != NULL)
+                        image_info->image_path = catenate_strings(IMAGE_DIR, image_info->image_name);
+
                     image_info->cached = find_file_in_cache(image_info->cache_path,
-                                                            file_map);                              /* Scan cache of images. One I/O instead of two */
+                                                            file_map);                                                  /* Scan cache of images. One I/O instead of two */
 
                     write_event_log(log_fp, LOG_IMAGE_REQUESTED,
                                     td->client_addr, image_info);
@@ -258,6 +268,11 @@ void *handle_client(void *arg) {
             case EMPTY_MESSAGE:
                 thread_pool->slot_used[td->E] = 0;
                 max_descriptor--;
+
+                free(request->ext);
+                free(request);
+
+
                 shutdown(td->conn_sd, SHUT_RDWR);
                 close(td->conn_sd);
                 pthread_exit(NULL);

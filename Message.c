@@ -133,12 +133,12 @@ int get_command_line(const char *message, char **firstline) {
     return OK;
 }
 
-int parse_name(char *line, char **image_name) {
+int parse_name(char *line, char **image_name, char **ext) {
 
     size_t i = 0, j = 0;
     size_t size = strlen(line), image_preallocation = IMAGE_NAME_PREALLOCATION;
     char *p = (char *)memory_alloc(IMAGE_NAME_PREALLOCATION), *tmp;
-
+    char *e = (char *)memory_alloc(5 * sizeof(char));
 
     while (i < size) {
 
@@ -146,7 +146,7 @@ int parse_name(char *line, char **image_name) {
             if (line[i + 1] == '?') {
                 i = i + 2;
 
-                for (; line[i] != ' '; i++) {
+                for (; line[i] != '.'; i++) {
                     //*((*image_name) + j) = line[i];
                     p[j] = line[i];
                     j++;
@@ -161,6 +161,16 @@ int parse_name(char *line, char **image_name) {
                 }
                 //*((*image_name) + j) = '\0';
                 p[j] = '\0';
+
+                j = 0;
+
+                for (; line[i] != ' '; i++) {
+                    e[j] = line[i];
+                    j++;
+                }
+
+                e[4] = '\0';
+
                 break;
 
             } else if(line[i + 1] == ' ') {
@@ -181,7 +191,12 @@ int parse_name(char *line, char **image_name) {
     memcpy(*image_name, p, strlen(p));
     *((*image_name) + strlen(p)) = '\0';
 
+    *ext = (char *) memory_alloc(strlen(e) + 1);
+    memcpy(*ext, e, strlen(e));
+    *((*ext) + strlen(e)) = '\0';
+
     free(p);
+    free(e);
 
     printf("IMAGE NAME %s\n", *image_name);
 
@@ -332,9 +347,9 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
                 }
                 if(strstr(token1, "jpg") != NULL)
                     buf_im_list[i].extension = JPG;
-                if(strstr(token1, "jpeg") != NULL)
+                else if(strstr(token1, "jpeg") != NULL)
                     buf_im_list[i].extension = JPG;
-                if(strstr(token1, "png") != NULL)
+                else if(strstr(token1, "png") != NULL)
                     buf_im_list[i].extension = PNG;
                 buf_im_list[i].q = 1.0;
                 printf("quality %f\n", buf_im_list[i].q);
@@ -419,17 +434,15 @@ int parse_message(char *message, struct Request **request) {
 
         parse_command(first_line, &((*request)->cmd));
 
-        ret = parse_name(first_line, &((*request)->image_name));
+        ret = parse_name(first_line, &((*request)->image_name), &((*request)->ext));
         if (ret == ICON_REQUESTED || ret == EMPTY_PATH) {
-            (*request)->image_name = ICON_NAME;
+           (*request)->image_name = ICON_NAME;
             free(first_line);
             return ICON_REQUESTED;
         } else if (ret == MESSAGE_NOT_CORRECT) {
             free(first_line);
             return MESSAGE_NOT_CORRECT;
         }
-
-        (*request)->ext = strrchr((*request)->image_name, '.');                                                         /* Extension of the image in the URL */
 
         free(first_line);
 
@@ -508,6 +521,41 @@ size_t build_message(off_t file_size, char *extension, char **msg) {
     return len;
 }
 
+ssize_t read_block(int in, char *buf, unsigned long size)
+{
+    unsigned long r;
+    ssize_t v;
+
+    r = 0;
+    while (size > r) {
+        v = read(in, buf, size - r);
+        if (v == -1) {
+            fprintf(stderr, "Error while reading file\n");
+            exit(EXIT_FAILURE);
+        }
+        if (v == 0)
+            return r;
+        r += v;
+        buf += v;
+    }
+    return r;
+}
+
+int write_block(int out, char *buf, unsigned long size)
+{
+    ssize_t v;
+
+    while (size > 0) {
+        v = write(out, buf, size);
+        if (v == -1) {
+            fprintf(stderr, "Error while writing file\n");
+            return ERROR_SENDING_MESSAGE;
+        }
+        size -= v;
+        buf += v;
+    }
+}
+
 int send_image(int conn_sd, struct image_t *image, int cmd) {
 
     char *msg = NULL;
@@ -532,7 +580,9 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {
     }
     /********************************************/
 
-    if(cmd == GET_CMD) {
+    /* sendfile() leaves memory allocated, replaced with read-write loop
+     *
+     * if(cmd == GET_CMD) {
         int retry = 5;
 
         ssize_t v = 0;
@@ -548,6 +598,42 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {
                 continue;
             } else if (v == image->file_size)
                 break;
+        }
+    }*/
+
+    if(cmd == GET_CMD) {
+        int retry = 5;
+
+        ssize_t r = 0, w = 0;
+        size_t len = 0;
+        char *buf = memory_alloc(1024);
+
+        while (retry > 0) {
+            while (1) {
+                r = read_block(image->fd, buf, 1024);
+                if(r == 0)
+                    break;
+                w = write_block(conn_sd, buf, 1024);
+                if (w == ERROR_SENDING_MESSAGE) {
+                    fprintf(stderr, "Error sending image\n");
+                    return ERROR_SENDING_MESSAGE;
+                }
+
+                len += w;
+
+                if (len == image->file_size) {
+                    fprintf(stderr, "Image sent not correctly\n");
+                    free(buf);
+                    break;
+                }
+            }
+
+            if (len != image->file_size && retry != 0) {
+                retry--;
+                continue;
+            }
+            else if(len != image->file_size && retry == 0)
+                return ERROR_SENDING_MESSAGE;
         }
     }
 

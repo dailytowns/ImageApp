@@ -1,0 +1,182 @@
+\documentclass[a4paper, titlepage]{article}
+\usepackage[italian]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage{newlfont}
+\usepackage{makeidx}
+\usepackage{hyperref}													%Visualizzazione di url
+
+%opening
+\title{}
+\author{}
+
+\begin{document}
+	
+	\begin{titlepage}
+		\begin{center}
+			{{\Large{\textsc{Università degli Studi di Roma Tor Vergata}}}} \rule[0.1cm]{5.8cm}{0.5mm}\\
+			{\small{\bf DIPARTIMENTO DI INGEGNERIA\\Corso di Laurea in Ingegneria Informatica}}
+		\end{center}
+		\vspace{15mm}
+		\begin{center}
+			{\LARGE{\bf\textit{ Content Adaption}:}}\\
+			\vspace{3mm}
+			{\LARGE{\bf Adattamento dinamico di contenuti statici}}\\
+			\vspace{19mm} {\large{\bf Relazione al progetto di Ingegneria di Internet e del Web}}
+		\end{center}
+		\vspace{40mm}
+		\par
+		\noindent
+		\begin{minipage}[t]{0.47\textwidth}
+			{\large{\bf Relatore:\\
+					Chiar.mo Prof.\\
+					Francesco Lo Presti}}
+		\end{minipage}
+		\hfill
+		\begin{minipage}[t]{0.47\textwidth}\raggedleft
+			{\large{\bf Presentata da:\\
+					Federico Amici}}
+		\end{minipage}
+		\vspace{20mm}
+		\begin{center}
+			{\large{\bf $\sharp$ Sessione\\
+					2017/2018 }}
+		\end{center}
+	\end{titlepage}
+	\tableofcontents
+	\newpage
+	
+	\section{Introduzione}
+	\begin{flushleft}
+		Questa relazione ha l'intento di illustrare, con la maggior chiarezza possibile, quanto è stato realizzato nell'ambito dello sviluppo di questo progetto relativo al corso di Ingegneria di Internet e del Web. Verranno illustrate altresì le scelte architetturali adottate nella realizzazione del sistema proposto, chiarendone i motivi alla base. All'interno della cartella principale del cd, è presente inoltre una presentazione contenente una raccolta di appunti stesi durante la realizzazione del progetto.\newline
+		Durante qualsiasi comunicazione all'interno della rete \textit{Internet} troviamo un'entità che richiede una risorsa, sia essa una pagina HTML, un'immagine JPEG o un frammento di un film che si sta guardando in streaming. Il numero di entità che possono fornire la risorsa varia tra \textit{1} ed un arbitrario \textit{n} a seconda dell'architettura adottata per la realizzazione dell'applicazione che si sta utilizzando per richiedere la risorsa:
+		\begin{itemize}
+			\item se l'applicazione è stata realizzata secondo l'architettura \textit{client-server} sarà una sola entità a fornire la risorsa richiesta, ovvero il server stesso
+			\item nel caso in cui l'applicazione sia stata progettata secondo l'architettura \textit{peer-to-peer}, la risorsa verrà fornita in generale da n entità che collaborano a tale scopo
+		\end{itemize}
+	...
+	
+	Il processo di sviluppo che è stato scelto per la realizzazione di questo progetto prende le mosse dai processi iterativi, i quali permettono di tornare indietro nelle fasi dello sviluppo per correggere o ampliare quanto steso precedentemente.
+	\end{flushleft}
+
+	\section{Traccia del progetto}
+	\begin{flushleft}
+		Lo scopo del progetto è quello di realizzare in linguaggio C usando l'API del socket di Berkeley un Web	server concorrente in grado di adattare dinamicamente il contenuto statico fornito in base alle caratteristiche del dispositivo del client. Il server dovrà fornire:
+		\begin{enumerate}
+			\item le funzionalità di base di un Web server (incluso il logging);
+			\item il supporto minimale del protocollo HTTP/1.1 (connessioni persistenti, metodi \textit{GET} e \textit{HEAD});
+			\item l'adattamento dinamico (on the fly) di immagini. Tale adattamento dovrà essere effettuato almeno per il formato \textit{JPEG} sulla base del fattore di qualità specificato dal client nell’header	\textit{Accept}; ad esempio, nel caso di \textit{Accept: image/jpeg; q=0.5, text/plain} il server fornirà in risposta l’immagine \textit{JPEG} richiesta con fattore di qualità pari a 0.5. L’adattamento potrà anche essere effettuato per altri formati di immagini ed applicando operazioni di manipolazione dell’immagine (ad es. conversione del formato, resizing, riduzione del numero di colori) sulla base di informazioni riguardanti il browser e contenute nell’header \textit{User-Agent} (si consiglia di usare \textit{WURFL} per ottenere le informazioni sulle caratteristiche dei dispositivi (\url{http://wurfl.sourceforge.net/}));
+			\item il caching della versione risultante dall’operazione di adattamento, allo scopo di ridurre l’overhead computazionale dell’adattamento. Implementare il caching in modo da gestire la presenza di versioni multiple di una stessa risorsa.
+		\end{enumerate}
+		Per l’adattamento delle immagini usare un programma esterno, ad esempio:
+		\begin{itemize}
+			\item \textit{ImageMagick} (in particolare, il programma \textit{convert}), disponibile all’URL \url{http://www.imagemagick.org/};
+			\item la libreria \textit{Independent JPEG Group} (in particolare, i programmi \textit{djpeg} e \textit{cjpeg}), disponibile all’URL \url{http://www.ijg.org/}.
+		\end{itemize}
+		Il server dovrà essere eseguito nello spazio utente ed essere in ascolto su una porta di default (configurabile); potrà essere testato tramite un browser reale o tra mite un tool a riga di comando quale \textit{cURL}, disponibile all’URL \url{http://curl.haxx.se/}.
+		Si richiede di valutare le prestazioni del Web server realizzato (non includendo le funzionalità  di adattamento dei contenuti) in termini di tempo di risposta e throughput e confrontarle con quelle di \textit{Apache 2.x} usando un semplice workload di tipo statico. La valutazione delle prestazioni può essere effettuata utilizzando il tool di benchmarking \textit{httperf} (disponibile all’URL \url{http://www.hpl.hp.com/personal/David\_Mosberger/httperf.html}).
+	\end{flushleft}
+	
+	\section{Environment}
+	\begin{flushleft}
+		-WURFL: prima ipotesi, comunicazione tra C e JAVA. Ricerca più accurata: API C
+		
+		http://libtins.github.io/download/\#download
+		
+		https://askubuntu.com/questions/522372/installing-32-bit-libraries-on-ubuntu-14-04-lts-64-bit
+		
+		https://askubuntu.com/questions/864188/pcap-library-not-found
+		
+		https://gist.github.com/rodleviton/74e22e952bd6e7e5bee1
+		
+		http://www.cs.colby.edu/maxwell/courses/tutorials/maketutor/
+		
+		https://www.youtube.com/watch?v=q3c6O85\_LoA
+		
+		Clion utilizzato solo per debug di piccole unita di test (linking difficoltoso)
+		
+		ECPG install	https://apps.ubuntu.com/cat/applications/precise/libecpg-dev/
+		
+		ERRORE NELL'XML (guarda screenshot)
+		
+		INSTALLAZIONE libpq-dev
+		
+		DA Ecpg a libpq per gestire le query dinamiche
+		
+		Cmake non compila ma senza lipbq in cmakelist non parte
+		
+		Sia ID che UserAgent sono chiavi primarie
+		
+		Dimensione della foto inviata nell'header Content length
+		
+		log in xml
+		
+		http://www.thegeekstuff.com/2010/04/inotify-c-program-example/
+		
+		https://github.com/nextcloud/client\_theming/issues/25
+		
+		https://www.postgresql.org/docs/8.1/static/libpq-threading.html
+		
+		http://www.lightbox.ca/pg2mysql.php
+		
+		Utilizzo valgrind
+		
+		http://www.tldp.org/HOWTO/html\_single/TCP-Keepalive-HOWTO/
+		
+		Python o LUA per GUI
+		
+		http://www.it.uom.gr/teaching/c\_sys/node30.html
+		
+		http://www.linuxbrigade.com/reduce-time\_wait-socket-connections/
+		
+		http://lkml.iu.edu/hypermail/linux/kernel/0106.1/1154.html
+	\end{flushleft}
+	
+	\section{Strutture principali utilizzate dal programma}
+	\subsection{\textit{struct Request}}
+	\begin{flushleft}
+		La \textit{struct Request} si occupa di raccogliere le informazioni relative alla richiesta del client. I suoi campi sono:
+		\begin{itemize}
+			\item \textit{image\_name}: \'{e} il nome del file richiesto dal client
+		\end{itemize}
+	\end{flushleft}
+	
+	\section{Requisiti non funzionali}
+	\begin{flushleft}
+		-I nomi delle immagini devono essere lunghi almeno tre lettere, ed al massimo 32
+	\end{flushleft}
+	
+	\section{Annotazioni}
+	\begin{flushleft}
+		-ifndef E' risultato utile per includere l'header Basic in più sorgenti, fatto che altrimenti avrebbe generato errori a tempo di compilazione dato che si stava tentando di ridefinire delle struct.\newline
+		-import del database effettuata con strumenti esterni: anche se non prestante non viene effettuato a runtime
+		-Nè Facebook nè google supportano keep-alive
+		-in sede di chiusura della connessione del client, viene settato a 0 solo connsd in modo da sfruttare il già inizializzato mutex
+		-RICONOSCERE MESSAGGI SPURI
+		-select si blocca perchè l'fd viene temporaneamente rimosso dall'insieme dei controllabili, generando tuttavia deadlock. Alternative? forse poll()
+		-cache query sia per prestazioni sia per evitare errori
+		-processo di sviluppo: "Albero" poi iterativo
+		-preferibile allocazione sullo stack poichè le allocazioni sull'heap sono in mutua esclusione fra i thread (uno per volta) (e poi l'heap è unico per il processo)
+		-mysql connessioni https://dba.stackexchange.com/questions/47131/how-to-get-rid-of-maximum-user-connections-error
+		
+		-user agent 0 0 IOT (cavolata?)
+		-lista dei file in cache salvata in un file e mappata in memoria -> crash del server preserva la lista (almeno la maggior parte)
+		
+		-dimensione del file di cache limitata a 64KB per evitare privilegi di amministratore (massima quantità di memoria bloccata pari a 64KB come da foto / Bisognerebbe controllare)
+		-favicon.ico creata con convert (si potrebbe fare a runtime, ma chi mo fa fa?)
+		
+		-installare mysql server
+		-creare utente root con password
+		
+		-libxml2-dev
+		
+		-per imagemagick: download sorgente, sudo apt-get install libmagickwand-dev, sudo apt-get install libmagickcore-dev, ./configure nella cartella, make, sudo make install, sudo ldconfig /usr/local/lib, installare brew con linuxbrew-wrapper, installare brew install imagemagick
+
+		-assunzione: le estensioni richieste hanno 3 lettere
+	\end{flushleft}
+	
+\end{document}
+\grid
+ 
+\grid
+\grid
+\grid

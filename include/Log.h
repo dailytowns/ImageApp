@@ -9,7 +9,7 @@
 
 #include "Message.h"
 
-enum event_type {CONNECTION_ACCEPTED, LOG_IMAGE_REQUESTED};
+enum event_type {CONNECTION_ACCEPTED, LOG_IMAGE_REQUESTED, LOG_EMPTY_MESSAGE};
 
 /**
  * Function: write_event_log

@@ -9,13 +9,14 @@
 #include "Message.h"
 #include "HandleImage.h"
 
-enum extension {ALL_EXT, JPG, PNG};
+enum extension {ALL_EXT, JPG, PNG, WEBP, JXR};
 
 enum cmd {GET_CMD, HEAD_CMD};
 
 enum msg_stat {REQUEST_RECEIVED, EMPTY_MESSAGE, ERROR_SENDING_MESSAGE, CONNECTION_CLOSED};
 
-enum rqst_stat {OK, ICON_REQUESTED, IMAGE_REQUESTED, MESSAGE_NOT_CORRECT, REQUEST_TOO_LONG, EMPTY_PATH};
+enum rqst_stat {OK, IMAGE_REQUESTED, MESSAGE_NOT_CORRECT, REQUEST_TOO_LONG,
+                EMPTY_PATH, IMAGE_NOT_PRESENT, ICON_REQUESTED};
 
 struct Request {
     int width;
@@ -85,4 +86,6 @@ int receive_message(struct thread_data *td, int idx);
  * @return Error status
  */
 int parse_message(char *message, struct Request **request);
+
+int send_bad_request(int conn_sd);
 #endif //IMAGEAPP_MESSAGE_H

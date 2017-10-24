@@ -7,7 +7,7 @@
 
 #define HTTP_MESSAGE_SIZE 512
 
-#define NUM_THREAD_POOL 256                                                                                           /* In MySQL the max_connection-th connection is for root user */
+#define NUM_THREAD_POOL 64                                                                                           /* In MySQL the max_connection-th connection is for root user */
 //#define NUM_THREAD_POOL 4                                                                                               /* In MySQL the max_connection-th connection is for root user */
 
 #define MAX_CONNECTION_DB 258                                                                                           /* 256 + root connection + eventual connection to MySQL workbench*/

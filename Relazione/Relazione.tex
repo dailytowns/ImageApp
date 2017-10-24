@@ -143,6 +143,8 @@
 	\section{Requisiti non funzionali}
 	\begin{flushleft}
 		-I nomi delle immagini devono essere lunghi almeno tre lettere, ed al massimo 32
+
+		-Ĺ'estensione determina univocamente il file richiesto, il formato richiesto viene recuperato dall'header content-type
 	\end{flushleft}
 	
 	\section{Annotazioni}
@@ -169,9 +171,10 @@
 		
 		-libxml2-dev
 		
-		-per imagemagick: download sorgente, sudo apt-get install libmagickwand-dev, sudo apt-get install libmagickcore-dev, ./configure nella cartella, make, sudo make install, sudo ldconfig /usr/local/lib, installare brew con linuxbrew-wrapper, installare brew install imagemagick
+		-per imagemagick: download sorgente, sudo apt-get install libmagickwand-dev, sudo apt-get install libmagickcore-dev, ./configure with jpg png e modules nella cartella, make, sudo make install, sudo ldconfig /usr/local/lib, installare brew con linuxbrew-wrapper, installare brew install imagemagick
 
-		-assunzione: le estensioni richieste hanno 3 lettere
+
+		-assunzione: le estensioni richieste hanno 3 lettere, se non riesco a leggere l'immagine tramite chiamata MagickReadImage(), l'immagine non é in memoria
 	\end{flushleft}
 	
 \end{document}

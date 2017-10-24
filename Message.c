@@ -13,6 +13,7 @@
 #include "include/Utils.h"
 #include "include/HandleImage.h"
 #include "include/Strings.h"
+#include "include/HtmlResponse.h"
 
 struct Request *create_request() {
 
@@ -49,6 +50,8 @@ int receive_message(struct thread_data *td, int idx) {
             if ((error == EINTR) || (error == EAGAIN)) {
                 retry--;
                 continue;
+            } else if(error == ECONNRESET) {
+                return EMPTY_MESSAGE;
             } else {
                 fprintf(stderr, "recv() in receive_message(), errno = %d", error);
                 exit(EXIT_FAILURE);
@@ -77,8 +80,8 @@ int receive_message(struct thread_data *td, int idx) {
                 // connection closed
                 printf("selectserver: socket %d hung up\n", td->conn_sd);
 
-                shutdown(td->conn_sd, SHUT_RDWR);
-                close(td->conn_sd);                                                                                     /* Both cause of error or closed connection, bye! */
+                //shutdown(td->conn_sd, SHUT_RDWR);
+                //close(td->conn_sd);                                                                                     /* Both cause of error or closed connection, bye! */
 
                 return EMPTY_MESSAGE;
 
@@ -146,7 +149,7 @@ int parse_name(char *line, char **image_name, char **ext) {
             if (line[i + 1] == '?') {
                 i = i + 2;
 
-                for (; line[i] != '.'; i++) {
+                for (; (line[i] != '.') && (line[i] != ' '); i++) {
                     //*((*image_name) + j) = line[i];
                     p[j] = line[i];
                     j++;
@@ -160,10 +163,12 @@ int parse_name(char *line, char **image_name, char **ext) {
 
                 }
                 //*((*image_name) + j) = '\0';
+                if(line[i] == ' ')
+                    return MESSAGE_NOT_CORRECT;
+
                 p[j] = '\0';
 
                 j = 0;
-
                 for (; line[i] != ' '; i++) {
                     e[j] = line[i];
                     j++;
@@ -344,6 +349,10 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
             if (strstr(token1, "image/") != NULL && token2 == NULL) {
                 if (strcmp(token1, "image/*") == 0) {
                     buf_im_list[i].extension = ALL_EXT;
+                    buf_im_list[i].q = 1.0;
+                    printf("quality %f\n", buf_im_list[i].q);
+                    i++;
+                    continue;
                 }
                 if(strstr(token1, "jpg") != NULL)
                     buf_im_list[i].extension = JPG;
@@ -351,6 +360,10 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
                     buf_im_list[i].extension = JPG;
                 else if(strstr(token1, "png") != NULL)
                     buf_im_list[i].extension = PNG;
+                else if(strstr(token1, "webp") != NULL)
+                    buf_im_list[i].extension = WEBP;
+                else if(strstr(token1, "jxr") != NULL)
+                    buf_im_list[i].extension = JXR;
                 buf_im_list[i].q = 1.0;
                 printf("quality %f\n", buf_im_list[i].q);
                 i++;
@@ -361,15 +374,16 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
                     buf_im_list[i].q = strtof(token2 + 3, &s);
                     if(!buf_im_list[i].q)
                         buf_im_list[i].q = 0.8;
-                    buf_im_list[i].extension = ALL_EXT;
-                    i++;
-                    continue;
                 }
+                buf_im_list[i].extension = ALL_EXT;
+                i++;
+                continue;
             }
-        } else if (token2 == NULL) {
-            i++;
-            continue;
         }
+//        else if (token2 == NULL) {
+//            i++;
+//            continue;
+//        }
 
         errno = 0;
         buf_im_list[i].q = strtof(token2 + 3, &s);
@@ -468,13 +482,13 @@ int parse_message(char *message, struct Request **request) {
     return OK;
 }
 
-size_t build_message(off_t file_size, char *extension, char **msg) {
+size_t build_message(off_t file_size, char *mime_type, char **msg, struct image_t *image) {
 
     size_t len = 0;
 
     char *char_size = convert_long_to_string(file_size);
 
-    printf("in buiiiiiiild message %s\n", extension);
+    printf("in buiiiiiiild message %s\n", mime_type);
 
     memcpy(*msg, "HTTP/1.1 200 OK", strlen("HTTP/1.1 200 OK"));
     len += strlen("HTTP/1.1 200 OK");
@@ -486,36 +500,49 @@ size_t build_message(off_t file_size, char *extension, char **msg) {
     memcpy(*msg + len, "\r\n", strlen("\r\n"));
     len += strlen("\r\n");
 
-    memcpy(*msg + len, "Content-Type: image/", strlen("content-type: image/"));
-    len += strlen("Content-Type: image/");
-    //*msg = catenate_strings(tmp_msg, ext);
-    /*while (i < strlen(ext)) {
-        *((*msg) + len + i) = ext[i];
-        i++;
+    if(image) {
+        memcpy(*msg + len, "Content-Type: image/", strlen("content-type: image/"));
+        len += strlen("Content-Type: image/");
+        memcpy(*msg + len, "jpeg", strlen("jpeg"));
+        len += strlen("jpeg");
+        memcpy(*msg + len, "\r\n", strlen("\r\n"));
+        len += strlen("\r\n");
+
+        memcpy(*msg + len, "Content-Transfer-Encoding: binary", strlen("Content-Transfer-Encoding: binary"));
+        len += strlen("Content-Transfer-Encoding: binary");
+        memcpy(*msg + len, "\r\n", strlen("\r\n"));
+        len += strlen("\r\n");
+
+        memcpy(*msg + len, "Content-Length: ", strlen("Content-Length: "));
+        len += strlen("Content-Length: ");
+        memcpy(*msg + len, char_size, strlen(char_size));
+        len += strlen(char_size);
+        memcpy(*msg + len, "\r\n", strlen("\r\n"));
+        len += strlen("\r\n");
+
+        memcpy(*msg + len, "Connection: Keep-Alive", strlen("Connection: Keep-Alive"));
+        len += strlen("Connection: Keep-Alive");
+        memcpy(*msg + len, "\r\n\r\n", strlen("\r\n\r\n"));
+        len += strlen("\r\n\r\n");
+    } else {
+        memcpy(*msg + len, "Content-Type: text/html", strlen("Content-Type: text/html"));
+        len += strlen("Content-Type: text/html");
+        memcpy(*msg + len, "\r\n", strlen("\r\n"));
+        len += strlen("\r\n");
+
+        memcpy(*msg + len, "Content-Length: ", strlen("Content-Length: "));
+        len += strlen("Content-Length: ");
+        memcpy(*msg + len, char_size, strlen(char_size));
+        len += strlen(char_size);
+        memcpy(*msg + len, "\r\n", strlen("\r\n"));
+        len += strlen("\r\n");
+
+        memcpy(*msg + len, "Connection: Closed", strlen("Connection: Closed"));
+        len += strlen("Connection: Closed");
+        memcpy(*msg + len, "\r\n\r\n", strlen("\r\n\r\n"));
+        len += strlen("\r\n\r\n");
+
     }
-    len += strlen(ext);*/
-    memcpy(*msg + len, "jpeg", strlen("jpeg"));
-    len += strlen("jpeg");
-    memcpy(*msg + len, "\r\n", strlen("\r\n"));
-    len += strlen("\r\n");
-
-    memcpy(*msg + len, "Content-Transfer-Encoding: binary", strlen("Content-Transfer-Encoding: binary"));
-    len += strlen("Content-Transfer-Encoding: binary");
-    memcpy(*msg + len, "\r\n", strlen("\r\n"));
-    len += strlen("\r\n");
-
-    memcpy(*msg + len, "Content-Length: ", strlen("Content-Length: "));
-    len += strlen("Content-Length: ");
-    memcpy(*msg + len, char_size, strlen(char_size));
-    len += strlen(char_size);
-    memcpy(*msg + len, "\r\n", strlen("\r\n"));
-    len += strlen("\r\n");
-
-    memcpy(*msg + len, "Connection: Keep-Alive", strlen("Connection: Keep-Alive"));
-    len += strlen("Connection: Keep-Alive");
-    memcpy(*msg + len, "\r\n\r\n", strlen("\r\n\r\n"));
-    len += strlen("\r\n\r\n");
-
     printf("message built %s\n\n", *msg);
 
     return len;
@@ -562,7 +589,7 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {
     msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
     msg[511] = '\0';
 
-    size_t len_header = build_message(image->file_size, image->ext, &msg);
+    size_t len_header = build_message(image->file_size, image->ext, &msg, image);
     ssize_t s = 0;
     size_t sent = 0;
 
@@ -639,3 +666,62 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {
 
     return OK;
 }
+
+int send_bad_request(int conn_sd) {
+
+    char *msg = NULL;
+    msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
+    msg[511] = '\0';
+
+    char *str_bad_request = memory_alloc(strlen(bad_request) + 1);
+    memcpy(str_bad_request, bad_request, strlen(bad_request));
+    str_bad_request[strlen(bad_request)] = '\0';
+    size_t len_bad = strlen(str_bad_request) + 1;
+
+    size_t len_header = build_message(len_bad, "text/html", &msg, NULL);
+    ssize_t s = 0;
+    size_t sent = 0;
+
+    /************ Send headers **********************/
+    while (sent < len_header) {
+
+        s = send(conn_sd, msg + sent, strlen(msg), MSG_MORE);
+
+        if (s == -1) {
+            fprintf(stderr, "Error in send()\n");
+            return ERROR_SENDING_MESSAGE;
+        }
+
+        sent += s;
+    }
+    /********************************************/
+
+    int retry = 5;
+
+    ssize_t v, w = 0;
+
+    while (retry > 0) {
+
+        while (len_bad - w > 0) {
+            v = write_block(conn_sd, bad_request + w, len_bad - w);
+            if (v == -1 && errno != EAGAIN) {
+                fprintf(stderr, "Error sending image\n");
+                return ERROR_SENDING_MESSAGE;
+            }
+
+            w += v;
+        }
+
+        if ((w != len_bad) && (retry != 0)) {
+            retry--;
+            continue;
+        }
+        else if ((w != len_bad) && (retry == 0))
+            return ERROR_SENDING_MESSAGE;
+        else if(w == len_bad)
+            break;
+
+    }
+
+}
+

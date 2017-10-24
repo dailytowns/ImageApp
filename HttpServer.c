@@ -47,8 +47,6 @@ int main(int argc, char *argv[]) {
     /*****************************    Main loop   ***********************************************************/
     while (1) {
 
-        ready = poll(array_fd, max_descriptor, 1000);
-
         switch (ready) {
             case -1:                                                                                                    /* If an error occurs in poll() */
                 fprintf(stderr, "Error in poll()\n");
@@ -56,12 +54,6 @@ int main(int argc, char *argv[]) {
                     fprintf(stderr, "in select, errno %d\n", errno);
                     exit(EXIT_FAILURE);
                 }
-                continue;
-
-            case 0:                                                                                                     /* If no fd is ready to be read */
-                index = 0;
-                while (index < max_descriptor)
-                    printf("descriptor %d %d\n", index, array_fd[index++].fd);
                 continue;
 
             default:
@@ -91,10 +83,11 @@ int main(int argc, char *argv[]) {
                             thread_pool,
                             thread_pool->S,
                             thread_pool->E);                                                                            /* Finds a free slot in the ring buffer */
-                    thread_pool->E = nE;
-                    printf("%d\n", thread_pool->E);
 
-                    thread_pool->td_pool[nE].conn_sd = conn_sd;                                      /* The rest of assignments are done in allocate_pool() */
+                    thread_pool->E = nE;
+                    //printf("%d\n", thread_pool->E);
+
+                    thread_pool->td_pool[nE].conn_sd = conn_sd;                                                         /* The rest of assignments are done in allocate_pool() */
                     thread_pool->td_pool[nE].E = nE;
                     thread_pool->td_pool[nE].client_addr = client_addr;
                     thread_pool->slot_used[nE] = 1;
@@ -119,7 +112,7 @@ int main(int argc, char *argv[]) {
 
                     thread_data[E].msg_received = 1;                                                                    /* Utile per il timer */
 
-                    printf("\n\nIN ELSE\n\n");
+                    //printf("\n\nIN ELSE\n\n");
 
                     //v = pthread_create(&tid, NULL, handle_client, &(thread_data[E]));
                     //abort_with_error("pthread_create()", v != 0);
@@ -141,7 +134,7 @@ int main(int argc, char *argv[]) {
     return EXIT_SUCCESS;
 }
 
-void get_image_to_send(struct image_t *image) {
+int get_image_to_send(struct image_t *image) {
 
     int fd;
     char *image_path = NULL;
@@ -158,7 +151,7 @@ void get_image_to_send(struct image_t *image) {
         if (fd != -1) {
             image->file_size = get_file_size(fd);
             image->fd = fd;
-            return;
+            return CACHED_IMAGE;
         }
     } else {
         fd = open_file(image->cache_path, O_CREAT | O_RDWR);
@@ -171,18 +164,36 @@ void get_image_to_send(struct image_t *image) {
         image_path = catenate_strings(IMAGE_DIR, image->image_name);
         image_path = catenate_strings(image_path, ".jpeg");
         result = MagickReadImage(magickWand, image_path);
-        abort_with_error("MagickWriteImage()", result == MagickFalse);
+        if(result == MagickFalse)
+            return IMAGE_NOT_PRESENT;
     }
 
     width = image->width ? (size_t) image->width : MagickGetImageWidth(magickWand);
     height = image->height ? (size_t) image->height : MagickGetImageHeight(magickWand);
 
-    MagickResetIterator(magickWand);
-    while(MagickNextImage(magickWand) == MagickFalse) {
-        MagickSetImageFormat(magickWand, image->ext);
-        MagickSetCompressionQuality(magickWand, (size_t)(image->image_list[0].q * 100));
-        MagickResizeImage(magickWand, width, height, LanczosFilter);
+    char *format = NULL, *ext = NULL;
+
+    if(image->image_list->extension == JPG) {
+        format = (char *) memory_alloc(5);
+        memcpy(format, ".jpg", 4);
+        format[4] = '\0';
+    } else if((image->image_list->extension == PNG)) {
+        format = (char *) memory_alloc(5);
+        memcpy(format, ".png", 4);
+        format[4] = '\0';
+    } else if((image->image_list->extension == JXR)) {
+        format = (char *) memory_alloc(5);
+        memcpy(format, ".jxr", 4);
+        format[4] = '\0';
+    } else if (image->image_list->extension == WEBP) {
+        format = (char *) memory_alloc(6);
+        memcpy(format, ".webp", 5);
+        format[5] = '\0';
     }
+
+    MagickSetImageFormat(magickWand, format);
+    MagickSetCompressionQuality(magickWand, (size_t)(image->image_list[0].q * 100));
+    MagickResizeImage(magickWand, width, height, LanczosFilter);
 
     result = MagickWriteImage(magickWand, image->cache_path);
     abort_with_error("MagickWriteImage", result == MagickFalse);
@@ -225,10 +236,9 @@ void *handle_client(void *arg) {
         switch (status_r) {
 
             case REQUEST_RECEIVED:                                                                                      /* A request has been sent by the client */
-
                 ret = parse_message(td->message[idx], &request);
                 if (ret == REQUEST_RECEIVED) {
-                    printf("user agent: %s\n", request->user_agent);
+                    //printf("user agent: %s\n", request->user_agent);
 
                     retrieve_from_DB(request,
                                      td->connDB);                                                                           /* Here is set also the cache name */
@@ -253,16 +263,37 @@ void *handle_client(void *arg) {
                     write_event_log(log_fp, LOG_IMAGE_REQUESTED,
                                     td->client_addr, image_info);
 
-                    get_image_to_send(image_info);
+                    ret = get_image_to_send(image_info);
+                    if(ret == IMAGE_NOT_PRESENT) {
+                        send_bad_request(td->conn_sd);
+                        thread_pool->slot_used[td->E] = 0;
+                        max_descriptor--;
 
-                    v = send_image(td->conn_sd, image_info, request->cmd);
+                        free(request->ext);
+                        free(request);
 
+
+                        shutdown(td->conn_sd, SHUT_RDWR);
+                        close(td->conn_sd);
+                    } else {
+                        v = send_image(td->conn_sd, image_info, request->cmd);
+                    }
+
+                } else if (ret == HEAD_CMD) {
+                    send_image(td->conn_sd, NULL, HEAD_CMD);
                 } else if (ret == ICON_REQUESTED) {
-                    icon.fd = open_file(ICON_PATH, O_RDONLY);
-                    icon.file_size = get_file_size(icon.fd);
                     send_image(td->conn_sd, &icon, GET_CMD);
-                }
+                } else if (ret == MESSAGE_NOT_CORRECT) {
+                    send_bad_request(td->conn_sd);
+                    thread_pool->slot_used[td->E] = 0;
+                    max_descriptor--;
 
+                    free(request->ext);
+                    free(request);
+
+                    shutdown(td->conn_sd, SHUT_RDWR);
+                    close(td->conn_sd);
+                }
                 break;
 
             case EMPTY_MESSAGE:
@@ -272,13 +303,17 @@ void *handle_client(void *arg) {
                 free(request->ext);
                 free(request);
 
-
                 shutdown(td->conn_sd, SHUT_RDWR);
                 close(td->conn_sd);
+
+                write_event_log(log_fp, LOG_EMPTY_MESSAGE,
+                                td->client_addr, image_info);
+                signal_cond(&(thread_pool->cb_not_full));
                 pthread_exit(NULL);
 
             case MESSAGE_NOT_CORRECT:
                 //deal with it
+                break;
 
             default:
                 break;
@@ -337,7 +372,7 @@ void set_socket_options(int sockfd, int keep_alive, int reuse_addr) {
 
     if (reuse_addr) {
         int optval = 1;
-        if ((setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int))) == -1) {
+        if ((setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval))) == -1) {
             fprintf(stderr, "Error in setsockopt()\n");
             exit(EXIT_FAILURE);
         }
@@ -460,7 +495,7 @@ printf("max mem %ld %ld \n", rlim.rlim_cur, rlim.rlim_max);
     /******************** Icon ****************************/
     icon.fd = open_file(ICON_PATH, O_RDONLY);
     icon.image_name = ICON_PATH;
-    //icon.file_size = get_file_size(icon.fd);
+    icon.file_size = get_file_size(icon.fd);
     /*****************************************************/
 
     return serverPtr;

@@ -3,28 +3,24 @@ project(ImageApp)
 
 set(CMAKE_C_STANDARD 90)
 
-set(SOURCE_FILES HttpServer.c Utils.c ThreadPool.c Log.c Message.c
-                HandleImage.c HandleDB.c Strings.c treexml.pgc include)
-set(SOURCE_FILES_XML ParseWurfl.c Utils.c)
-set(TEST TestCurl.c)
+add_executable(httpserver HttpServer.c Utils.c ThreadPool.c Request.c Log.c
+                Strings.c HandleDB.c HandleImage.c include)
+#add_executable(ParseWurfl ${SOURCE_FILES_XML})
+#add_executable(TimerHandler TimerHandler.c)
 
-add_executable(httpserver ${SOURCE_FILES})
-
-add_executable(ParseWurfl ${SOURCE_FILES_XML})
-
-add_executable(TEST TestCurl.c)
-target_link_libraries(TEST curl)
+#add_executable(TEST TestCurl.c)
+#target_link_libraries(TEST curl)
 
 target_link_libraries(httpserver pthread)
-target_link_libraries(TEST pthread)
+#target_link_libraries(TEST pthread)
 
 ###### PkgConfig ########
 find_package(PkgConfig)
 if(PKG_CONFIG_FOUND)
     pkg_check_modules(LIBXML2 "libxml-2.0")
     if(LIBXML2_FOUND)
-        #target_link_libraries(httpserver ${LIBXML2_LIBRARIES})
-        target_link_libraries(ParseWurfl ${LIBXML2_LIBRARIES})
+        target_link_libraries(httpserver ${LIBXML2_LIBRARIES})
+        #target_link_libraries(ParseWurfl ${LIBXML2_LIBRARIES})
         add_definitions(${LIBXML2_CFLAGS} ${LIBXML2_CFLAGS_OTHER})
     endif()
     pkg_check_modules(IMAGEMAGICK "MagickWand")
@@ -47,7 +43,7 @@ if(PKG_CONFIG_FOUND)
     pkg_check_modules(LIBMYSQLCLIENT "mysqlclient")
     if(LIBMYSQLCLIENT_FOUND)
         target_link_libraries(httpserver ${LIBMYSQLCLIENT_LIBRARIES})
-        target_link_libraries(ParseWurfl ${LIBMYSQLCLIENT_LIBRARIES})
+        #target_link_libraries(ParseWurfl ${LIBMYSQLCLIENT_LIBRARIES})
         #target_link_libraries(MINIM ${LIBMYSQLCLIENT_LIBRARIES})
         add_definitions(${LIBMYSQLCLIENT_CFLAGS} ${LIBMYSQLCLIENT_CFLAGS_OTHER})
     endif()

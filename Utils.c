@@ -1,5 +1,5 @@
 //
-// Created by federico on 13/10/17.
+// Created by federico on 31/10/17.
 //
 
 #include <dirent.h>
@@ -12,7 +12,7 @@
 
 #include "include/Config.h"
 #include "include/Utils.h"
-
+#include "include/Request.h"
 
 
 void *memory_alloc(size_t size) {
@@ -150,4 +150,45 @@ int find_file_in_cache(char *cache_path, char *map) {
     }
 
     return NOT_CACHED_IMAGE;
+}
+
+ssize_t read_block(int in, char *buf, unsigned long size)
+{
+    unsigned long r;
+    ssize_t v;
+
+    r = 0;
+    while (size > r) {
+        v = read(in, buf, size - r);
+        if (v == -1) {
+            fprintf(stderr, "Error while reading file\n");
+            exit(EXIT_FAILURE);
+        }
+        if (v == 0)
+            return r;
+        r += v;
+        buf += v;
+    }
+    return r;
+}
+
+int write_block(int out, char *buf, unsigned long size)
+{
+    ssize_t v = 0;
+    int error;
+
+    while (size > 0) {
+        errno = 0;
+        v = write(out, buf + v, size - v);
+        error = errno;
+        if (v == -1 && error != EAGAIN) {
+            if(error == EPIPE)
+                return CONNECTION_CLOSED;
+            fprintf(stderr, "%s\n", strerror(errno));
+            fprintf(stderr, "Error while writing file\n");
+            return ERROR_SENDING_MESSAGE;
+        }
+        size -= v;
+        buf += v;
+    }
 }

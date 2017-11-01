@@ -1,23 +1,17 @@
-#include <sys/types.h>
-#include <time.h>
+//
+// Created by federico on 31/10/17.
+//
+
 #include <errno.h>
-#include <sys/socket.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/sendfile.h>
 
-#include "include/Message.h"
-#include "include/Config.h"
-#include "include/Utils.h"
-#include "include/HandleImage.h"
-#include "include/Strings.h"
 #include "include/HtmlResponse.h"
+#include "include/Request.h"
+#include "include/Utils.h"
 
-struct Request *create_request() {
+struct request_t *create_request() {
 
-    struct Request *request = memory_alloc(sizeof(struct Request));
+    struct request_t *request = memory_alloc(sizeof(struct request_t));
     request->user_agent = memory_alloc(USERAGENT_PREALLOCATION * sizeof(char));
     request->image_name = memory_alloc(IMAGE_NAME_PREALLOCATION * sizeof(char));
     request->image_list = create_mime_list(4);
@@ -26,17 +20,13 @@ struct Request *create_request() {
 
 }
 
-int receive_message(struct thread_data *td, int idx) {
+int receive_request(struct thread_data *td, int idx) {
 
     ssize_t v = 0, received = 0;
     size_t tot = HTTP_MESSAGE_SIZE;
     int error;
     int retry = 2;                         //avoid errno = EAGAIN
 
-    struct timespec start, finish;
-    double elapsed;
-
-    clock_gettime(CLOCK_MONOTONIC, &start);
     while (retry >= 0) {
 
         if (retry == 0 && v == -1)
@@ -71,20 +61,12 @@ int receive_message(struct thread_data *td, int idx) {
             }
         }
 
-
         received += v;
 
         if (v <= 0) {
 
-            if (v == 0) {
-                // connection closed
-                printf("selectserver: socket %d hung up\n", td->conn_sd);
-
-                //shutdown(td->conn_sd, SHUT_RDWR);
-                //close(td->conn_sd);                                                                                     /* Both cause of error or closed connection, bye! */
-
+            if (v == 0) {                                                                                               /*Keep connection up*/
                 return EMPTY_MESSAGE;
-
             } else {
                 perror("recv");
             }
@@ -203,7 +185,7 @@ int parse_name(char *line, char **image_name, char **ext) {
     free(p);
     free(e);
 
-    printf("IMAGE NAME %s\n", *image_name);
+    //printf("IMAGE NAME %s\n", *image_name);
 
     return IMAGE_REQUESTED;
 
@@ -240,7 +222,7 @@ int get_accept_line(char *message, char **accept_line) {
     memcpy(*accept_line, tmp_acceptline, strlen(tmp_acceptline));
     *((*accept_line) + strlen(tmp_acceptline)) = '\0';
 
-    printf("*acceptline %s\n", *accept_line);
+    //printf("*acceptline %s\n", *accept_line);
 
     free(tmp_acceptline);
 
@@ -290,7 +272,7 @@ int get_user_agent(char *message, char **user_agent) {
 
 void get_list_accept_image(char *accept_line, ImageNode **image_list) {
 
-    size_t preallocation = 4, size = 0;
+    size_t preallocation = 4;
     unsigned int dim = 0;
 
     ImageNode *buf_im_list = NULL, *p;
@@ -317,10 +299,9 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
         buf_im_list[dim].type = strdup(token1);
         int idx = 0;
         while(idx < dim) {
-            printf("bufimlist[dim] %s\n", buf_im_list[idx].type);
+            //printf("bufimlist[dim] %s\n", buf_im_list[idx].type);
             idx++;
         }
-        idx= 0;
 
         token1 = strtok(NULL, sep);                                                                                     /* Now NULL is used to work with the same string as stated in the man page */
 
@@ -350,7 +331,7 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
                 if (strcmp(token1, "image/*") == 0) {
                     buf_im_list[i].extension = ALL_EXT;
                     buf_im_list[i].q = 1.0;
-                    printf("quality %f\n", buf_im_list[i].q);
+                    //printf("quality %f\n", buf_im_list[i].q);
                     i++;
                     continue;
                 }
@@ -365,7 +346,7 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
                 else if(strstr(token1, "jxr") != NULL)
                     buf_im_list[i].extension = JXR;
                 buf_im_list[i].q = 1.0;
-                printf("quality %f\n", buf_im_list[i].q);
+                //printf("quality %f\n", buf_im_list[i].q);
                 i++;
                 continue;
             } else if (strstr(token1, "*/*") != NULL) {
@@ -435,7 +416,7 @@ void parse_command(char *first_line, int *cmd) {
     *cmd = MESSAGE_NOT_CORRECT;
 }
 
-int parse_message(char *message, struct Request **request) {
+int parse_request(char *message, struct request_t **request) {
 
     *request = create_request();
     int ret;
@@ -450,7 +431,7 @@ int parse_message(char *message, struct Request **request) {
 
         ret = parse_name(first_line, &((*request)->image_name), &((*request)->ext));
         if (ret == ICON_REQUESTED || ret == EMPTY_PATH) {
-           (*request)->image_name = ICON_NAME;
+            (*request)->image_name = ICON_NAME;
             free(first_line);
             return ICON_REQUESTED;
         } else if (ret == MESSAGE_NOT_CORRECT) {
@@ -475,115 +456,12 @@ int parse_message(char *message, struct Request **request) {
 
         }
 
-    } else if (ret == REQUEST_TOO_LONG) {
-        //Deal with it
     }
 
-    return OK;
+    return REQUEST_RECEIVED;
 }
 
-size_t build_message(off_t file_size, char *mime_type, char **msg, struct image_t *image) {
-
-    size_t len = 0;
-
-    char *char_size = convert_long_to_string(file_size);
-
-    printf("in buiiiiiiild message %s\n", mime_type);
-
-    memcpy(*msg, "HTTP/1.1 200 OK", strlen("HTTP/1.1 200 OK"));
-    len += strlen("HTTP/1.1 200 OK");
-    memcpy(*msg + len, "\r\n", strlen("\r\n"));
-    len += strlen("\r\n");
-
-    memcpy(*msg + len, "Server: 127.0.0.1", strlen("Server: 127.0.0.1"));
-    len += strlen("Server: 127.0.0.1");
-    memcpy(*msg + len, "\r\n", strlen("\r\n"));
-    len += strlen("\r\n");
-
-    if(image) {
-        memcpy(*msg + len, "Content-Type: image/", strlen("content-type: image/"));
-        len += strlen("Content-Type: image/");
-        memcpy(*msg + len, "jpeg", strlen("jpeg"));
-        len += strlen("jpeg");
-        memcpy(*msg + len, "\r\n", strlen("\r\n"));
-        len += strlen("\r\n");
-
-        memcpy(*msg + len, "Content-Transfer-Encoding: binary", strlen("Content-Transfer-Encoding: binary"));
-        len += strlen("Content-Transfer-Encoding: binary");
-        memcpy(*msg + len, "\r\n", strlen("\r\n"));
-        len += strlen("\r\n");
-
-        memcpy(*msg + len, "Content-Length: ", strlen("Content-Length: "));
-        len += strlen("Content-Length: ");
-        memcpy(*msg + len, char_size, strlen(char_size));
-        len += strlen(char_size);
-        memcpy(*msg + len, "\r\n", strlen("\r\n"));
-        len += strlen("\r\n");
-
-        memcpy(*msg + len, "Connection: Keep-Alive", strlen("Connection: Keep-Alive"));
-        len += strlen("Connection: Keep-Alive");
-        memcpy(*msg + len, "\r\n\r\n", strlen("\r\n\r\n"));
-        len += strlen("\r\n\r\n");
-    } else {
-        memcpy(*msg + len, "Content-Type: text/html", strlen("Content-Type: text/html"));
-        len += strlen("Content-Type: text/html");
-        memcpy(*msg + len, "\r\n", strlen("\r\n"));
-        len += strlen("\r\n");
-
-        memcpy(*msg + len, "Content-Length: ", strlen("Content-Length: "));
-        len += strlen("Content-Length: ");
-        memcpy(*msg + len, char_size, strlen(char_size));
-        len += strlen(char_size);
-        memcpy(*msg + len, "\r\n", strlen("\r\n"));
-        len += strlen("\r\n");
-
-        memcpy(*msg + len, "Connection: Closed", strlen("Connection: Closed"));
-        len += strlen("Connection: Closed");
-        memcpy(*msg + len, "\r\n\r\n", strlen("\r\n\r\n"));
-        len += strlen("\r\n\r\n");
-
-    }
-    printf("message built %s\n\n", *msg);
-
-    return len;
-}
-
-ssize_t read_block(int in, char *buf, unsigned long size)
-{
-    unsigned long r;
-    ssize_t v;
-
-    r = 0;
-    while (size > r) {
-        v = read(in, buf, size - r);
-        if (v == -1) {
-            fprintf(stderr, "Error while reading file\n");
-            exit(EXIT_FAILURE);
-        }
-        if (v == 0)
-            return r;
-        r += v;
-        buf += v;
-    }
-    return r;
-}
-
-int write_block(int out, char *buf, unsigned long size)
-{
-    ssize_t v;
-
-    while (size > 0) {
-        v = write(out, buf, size);
-        if (v == -1) {
-            fprintf(stderr, "Error while writing file\n");
-            return ERROR_SENDING_MESSAGE;
-        }
-        size -= v;
-        buf += v;
-    }
-}
-
-int send_image(int conn_sd, struct image_t *image, int cmd) {
+int send_image(int conn_sd, struct image_t *image, int cmd) {                                                           //aggiungo indice per scegliere slot da sbloccare
 
     char *msg = NULL;
     msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
@@ -641,10 +519,11 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {
                 if(r == 0)
                     break;
                 w = write_block(conn_sd, buf, 1024);
-                if (w == ERROR_SENDING_MESSAGE) {
+                if (w == -1) {
                     fprintf(stderr, "Error sending image\n");
                     return ERROR_SENDING_MESSAGE;
-                }
+                } else if (w == CONNECTION_CLOSED)
+                    return CONNECTION_CLOSED;
 
                 len += w;
 
@@ -659,12 +538,17 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {
                 retry--;
                 continue;
             }
-            else if(len != image->file_size && retry == 0)
+            else if(len != image->file_size && retry == 0) {
                 return ERROR_SENDING_MESSAGE;
+            }
         }
+
+        free(buf);
+        return OK;
     }
 
     return OK;
+
 }
 
 int send_bad_request(int conn_sd) {
@@ -724,4 +608,3 @@ int send_bad_request(int conn_sd) {
     }
 
 }
-

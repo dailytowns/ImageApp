@@ -132,6 +132,13 @@
 	\end{flushleft}
 	
 	\section{Strutture principali utilizzate dal programma}
+		\subsection{\textit{struct Server}}
+	\begin{flushleft}
+		La \textit{struct Request} si occupa di raccogliere le informazioni relative alla richiesta del client. I suoi campi sono:
+		\begin{itemize}
+			\item \textit{image\_name}: \'{e} il nome del file richiesto dal client
+		\end{itemize}
+	\end{flushleft}
 	\subsection{\textit{struct Request}}
 	\begin{flushleft}
 		La \textit{struct Request} si occupa di raccogliere le informazioni relative alla richiesta del client. I suoi campi sono:
@@ -144,7 +151,7 @@
 	\begin{flushleft}
 		-I nomi delle immagini devono essere lunghi almeno tre lettere, ed al massimo 32
 
-		-Ĺ'estensione determina univocamente il file richiesto, il formato richiesto viene recuperato dall'header content-type
+		-l'estensione determina univocamente il file richiesto, il formato richiesto viene recuperato dall'header content type
 	\end{flushleft}
 	
 	\section{Annotazioni}
@@ -174,8 +181,22 @@
 		-per imagemagick: download sorgente, sudo apt-get install libmagickwand-dev, sudo apt-get install libmagickcore-dev, ./configure with jpg png e modules nella cartella, make, sudo make install, sudo ldconfig /usr/local/lib, installare brew con linuxbrew-wrapper, installare brew install imagemagick
 
 
-		-assunzione: le estensioni richieste hanno 3 lettere, se non riesco a leggere l'immagine tramite chiamata MagickReadImage(), l'immagine non é in memoria
+		-assunzione: le estensioni richieste hanno 3 lettere, se non riesco a leggere l'immagine tramite chiamata MagickReadImage(), l'immagine non e in memoria
+
+		/* OPERATION NOT PERMITTED
+		struct rlimit rlim;
+		rlim.rlim\_cur = 524288;
+		rlim.rlim\_max = 524288;
+
+		errno = 0;
+		if(setrlimit(RLIMIT\_MEMLOCK, \&rlim) == -1)
+		fprintf(stderr, "%s\n", strerror(errno));
+
+		getrlimit(RLIMIT\_MEMLOCK, \&rlim);
+		printf("max mem %ld %ld \n", rlim.rlim_cur, rlim.rlim_max);
+		*/
 	\end{flushleft}
+
 	
 \end{document}
 \grid

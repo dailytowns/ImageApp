@@ -6,8 +6,9 @@
 #define IMAGEAPP_LOG_H
 
 #include <netinet/in.h>
+#include <stdio.h>
 
-#include "Message.h"
+#include "HandleImage.h"
 
 enum event_type {CONNECTION_ACCEPTED, LOG_IMAGE_REQUESTED, LOG_EMPTY_MESSAGE};
 

@@ -1,15 +1,16 @@
 //
-// Created by federico on 03/10/17.
+// Created by federico on 31/10/17.
 //
+
 #include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <unistd.h>
 
 #include "include/ThreadPool.h"
 #include "include/Utils.h"
+#include "include/HttpServer.h"
 #include "include/HandleDB.h"
 
-struct thread_pool *allocate_pool(int num_threads) {
+struct pool_t *allocate_pool(int num_threads) {
 
     struct thread_data *pool_thread = (struct thread_data *) memory_alloc(num_threads * sizeof(struct thread_data));
 
@@ -19,11 +20,20 @@ struct thread_pool *allocate_pool(int num_threads) {
     /* Initializes every struct thread_data that are to be in the pool */
     while (i < num_threads) {
 
-        (pool_thread[i]).message = (char **) memory_alloc(5 * sizeof(char *));                                          //Allocated five slots for messages
-        (pool_thread[i]).fd = (int *) memory_alloc(5 * sizeof(int));                                                    //Allocated five slots for messages
+        (pool_thread[i]).message = (char **) memory_alloc(
+                5 * sizeof(char *));                                          //Allocated five slots for messages
+        int msg = 0;
+        while (msg < 5) {
+            (pool_thread[i]).message[msg] = memory_alloc(HTTP_MESSAGE_SIZE);
+            msg++;
+        }
+        (pool_thread[i]).fd = (int *) memory_alloc(
+                5 * sizeof(int));                                                    //Allocated five slots for messages
         (pool_thread[i]).tid = tid;
         (pool_thread[i]).conn_sd = 0;
         (pool_thread[i]).idx = 0;
+        (pool_thread[i]).timer = 10;
+        (pool_thread[i]).msg_received = 0;
 
         printf("i db %d\n", i);
 
@@ -33,14 +43,20 @@ struct thread_pool *allocate_pool(int num_threads) {
         init_mutex(&((pool_thread[i]).mtx_new_request));
         init_cond(&((pool_thread[i]).cond_no_msg));
 
+        abort_with_error("pthread_create()",
+                         pthread_create(&((pool_thread[i]).tid),
+                                        NULL,
+                                        handle_client,
+                                        pool_thread + i) != 0);
+
         i++;
     }
 
     /* The poll is allocated and the pool of threads is assigned to the relative field*/
-    struct thread_pool *pool = memory_alloc(sizeof(struct thread_pool));
-    pool->td_pool = pool_thread;
-    pool->E = 0;
-    pool->S = 0;
+    struct pool_t *pool = memory_alloc(sizeof(struct pool_t));
+    pool->arr = pool_thread;
+    pool->E = 1;
+    pool->S = 1;
 
     /**************** Initialization of the mutex and condition variables ****************************************/
     if (pthread_mutex_init(&(pool->mtx), NULL) != 0) {
@@ -59,54 +75,70 @@ struct thread_pool *allocate_pool(int num_threads) {
     }
     /************************************************************************************************************/
 
-    pool->get_E = get_E;
-
-    i = 0;
-    while(i < num_threads) {
-        pool->slot_used[i] = 0;
-        i++;
-    }
-
     return pool;
 }
 
-int find_E_for_fd(struct thread_pool *pool, int S, int E, int fd) {
+int find_E_for_fd(struct pool_t *pool, int fd) {
 
     int i = 0;
 
-    while(i < NUM_THREAD_POOL) {
+    while (i < NUM_THREAD_POOL) {
 
-        if(pool->slot_used[i] == 1 && (pool->td_pool[i].conn_sd == fd))
+        if (pool->array_fd[i].fd == fd)
             return i;
         i++;
     }
 
-    if(i == NUM_THREAD_POOL)
-        return CONNECTION_CLOSED;
+    if (i == NUM_THREAD_POOL)
+        return -1;
 
 }
 
-int get_E(struct thread_pool *pool, int S, int E) {
+
+int get_E(struct pool_t *pool) {
 
     int i = 0;
-    int nE = (E+1) % NUM_THREAD_POOL;
+    int nE;
 
-    while(1) {
-
-        if(pool->slot_used[nE] == 0)                                                                                    /* Try to get index fast */
-            return nE;
-
+    while (1) {
         while (i < NUM_THREAD_POOL) {
-            if (pool->slot_used[(S + i)%NUM_THREAD_POOL] == 0) {
+            nE = (pool->E + i) % NUM_THREAD_POOL;
+            if (pool->array_fd[nE].fd == -1) {
+                pool->E = (nE + 1) % NUM_THREAD_POOL;                                                                   /* Start from next index the second time */
                 signal_cond(&(pool->cb_not_empty));
-                return i;
+                return nE;
             }
             i++;
         }
 
         if (i == NUM_THREAD_POOL) {
+            //get_mutex(&pool->mtx);
             wait_cond(&(pool->cb_not_full), &(pool->mtx));
             i = 0;
+            //release_mutex(&(pool->mtx));
+        }
+    }
+
+}
+
+int handle_timer(struct thread_data *td) {
+
+
+    while (1) {
+
+        if (td->timer == 0) {
+            return 0;
+        } else {
+
+            get_mutex(&(td->mtx_new_request));
+            if ((td->msg_received) == 1) {
+                td->timer = td->timer - 1;
+                release_mutex(&(td->mtx_new_request));
+                return td->timer;
+            }
+            release_mutex(&(td->mtx_new_request));
+            td->timer = td->timer - 1;
+            sleep(1);
         }
 
     }

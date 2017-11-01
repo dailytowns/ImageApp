@@ -1,5 +1,5 @@
 //
-// Created by federico on 13/10/17.
+// Created by federico on 31/10/17.
 //
 
 #ifndef IMAGEAPP_UTILS_H
@@ -97,4 +97,8 @@ off_t get_file_size(int fd);
  * @return status code
  */
 int find_file_in_cache(char *cache_path, char *map);
+
+ssize_t read_block(int fd, char *buf, unsigned long size);
+
+int write_block(int sock_fd, char *buf, unsigned long size);
 #endif //IMAGEAPP_UTILS_H

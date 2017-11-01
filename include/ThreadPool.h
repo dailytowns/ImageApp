@@ -1,5 +1,5 @@
 //
-// Created by federico on 03/10/17.
+// Created by federico on 31/10/17.
 //
 
 #ifndef IMAGEAPP_THREADPOOL_H
@@ -7,6 +7,7 @@
 
 #include <mysql.h>
 #include <netinet/in.h>
+#include <poll.h>
 
 #include "Config.h"
 
@@ -24,25 +25,27 @@ struct thread_data {
     pthread_cond_t cond_msg;
     MYSQL *connDB;
     struct sockaddr_in client_addr;
+    int timer;
+    int request;
 };
 
 /**
  * The pool of threads that is going to be used in the program.
  * In this case, it is implemented as a ring buffer
  */
-struct thread_pool {
+struct pool_t {
     /*@{*/
     int E;                                                                                                              /**< The end index of the ring buffer */
     int S;                                                                                                              /**< The start index of the ring buffer */
-    short slot_used[NUM_THREAD_POOL];                                                                                   /**< Array that keeps track of the slots used in the ring buffer */
     pthread_mutex_t mtx;                                                                                                /**< Mutex useful for mutual exclusive access to the buffer */
     pthread_cond_t cb_not_full;                                                                                         /**< Condition variable that is used to signal or wait for buffer not full */
     pthread_cond_t cb_not_empty;                                                                                        /**< Condition variable that is used to signal or wait for buffer not empty */
-    struct thread_data *td_pool;                                                                                        /**< Pointer to the ring buffer */
-
-    int (*get_E)(struct thread_pool *pool, int S, int E);                                                               /**< Function pointer */
+    struct thread_data *arr;                                                                                            /**< Pointer to the ring buffer */
     /*@{*/
+    struct pollfd array_fd[NUM_THREAD_POOL];
 };
+
+int handle_timer(struct thread_data *td);
 
 /**
  * Function: get_E
@@ -54,7 +57,7 @@ struct thread_pool {
  * @param E The end index
  * @return The index of the free slot
  */
-int get_E(struct thread_pool *pool, int S, int E);
+int get_E(struct pool_t *pool);
 
 /**
  * Function: allocate_pool
@@ -64,7 +67,7 @@ int get_E(struct thread_pool *pool, int S, int E);
  * @param num_threads Number of threads preallocated
  * @return A pointer to the array of threads preallocated
  */
-struct thread_pool *allocate_pool(int num_threads);
+struct pool_t *allocate_pool(int num_threads);
 
 /**
  * Function: init_mutex
@@ -140,5 +143,6 @@ void release_mutex(pthread_mutex_t *mtx);
  *
  * @return index of slot corresponding to the file descriptor
  */
-int find_E_for_fd(struct thread_pool *pool, int S, int E, int fd);
+int find_E_for_fd(struct pool_t *pool, int fd);
+
 #endif //IMAGEAPP_THREADPOOL_H

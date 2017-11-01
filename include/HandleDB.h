@@ -5,11 +5,13 @@
 #ifndef IMAGEAPP_HANDLEDB_H
 #define IMAGEAPP_HANDLEDB_H
 
-#include "Message.h"
+#include <mysql.h>
+
+#include "Request.h"
 
 enum DB_stat {NO_VALUE_IN_DB, VALUE_DB};
 
-void retrieve_from_DB(struct Request *request, MYSQL *conn);
+void retrieve_from_DB(struct request_t *request, MYSQL *conn);
 
 /**
  * Function: connect_DB

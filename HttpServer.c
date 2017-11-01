@@ -1,3 +1,7 @@
+//
+// Created by federico on 31/10/17.
+//
+
 #include <sys/poll.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -8,240 +12,165 @@
 #include <errno.h>
 #include <sys/mman.h>
 
-#include "include/Config.h"
 #include "include/HttpServer.h"
-#include "include/ThreadPool.h"
 #include "include/Utils.h"
+#include "include/ThreadPool.h"
+#include "include/HandleImage.h"
+#include "include/Request.h"
 #include "include/Log.h"
-#include "include/Message.h"
-#include "include/HandleDB.h"
 #include "include/Strings.h"
+#include "include/HandleDB.h"
 
-struct thread_pool *thread_pool;
-nfds_t max_descriptor;
-char *file_map;
-size_t seek_cache;
 FILE *log_fp;
 struct image_t icon;
-struct pollfd array_fd[NUM_THREAD_POOL];
+char *file_map;
+size_t seek_cache;
+struct pool_t *pool;
+nfds_t max_descriptor;
 
-int main(int argc, char *argv[]) {
+int main() {
 
     MagickWandGenesis();                                                                                                /* Initializes the MagickWand environment */
 
     int conn_sd;                                                                                                        /* Connection's file descriptor */
     int ready;                                                                                                          /* Number of ready fd */
-    int index;                                                                                                          /* Iterators */
     int ret;
-    nfds_t d;
-
-    max_descriptor = 1;                                                                                                 /* Number of descriptors to be checked */
+    int i, nE;
+    nfds_t d;                                                                                                           /* Iterator */
+    max_descriptor = 1;                                                                                          /* Number of descriptors to be checked */
 
     socklen_t socklen;
     struct sockaddr_in client_addr;
 
-    ServerPtr serverPtr = create_server();
-    thread_pool = serverPtr->thread_pool;
-    struct thread_data *thread_data = thread_pool->td_pool;
+    struct server_t *server = init_server();
+    pool = server->pool;
+    struct thread_data *td = pool->arr;
+    struct pollfd *arrfd = pool->array_fd;
 
-    /*****************************    Main loop   ***********************************************************/
     while (1) {
 
-        switch (ready) {
-            case -1:                                                                                                    /* If an error occurs in poll() */
-                fprintf(stderr, "Error in poll()\n");
-                if (errno == EBADF || errno == ENOMEM) {
-                    fprintf(stderr, "in select, errno %d\n", errno);
-                    exit(EXIT_FAILURE);
-                }
-                continue;
-
-            default:
-                break;
+        /************************* Poll descriptors ********************************************/
+        ready = poll(arrfd, max_descriptor, 1000);
+        if (ready ==
+            -1) {                                                                                              /* If an error occurs in poll() */
+            fprintf(stderr, "Error in poll()\n");
+            if (errno == EBADF || errno == ENOMEM) {
+                fprintf(stderr, "in select, errno %d\n", errno);
+                exit(EXIT_FAILURE);
+            }
+        } else if (ready == 0) {
+            int fd = 0;
+            while (fd < max_descriptor) {
+                printf("arr fd 0 1 %d %d\n", fd, arrfd[fd].fd);
+                fd++;
+            }
+            continue;
         }
+        /*************************************************************************************/
 
-        for (d = 0; d < max_descriptor; d++) {
+        d = 0;
+        i = 0;
 
-            if (array_fd[d].revents &
-                POLLIN) {                                                                                               /* If the d-ith descriptor has received bytes to be read */
+        while (d <
+               max_descriptor) {                                                                                     /* Iterate over d ready descriptors */
 
-                if (array_fd[d].fd ==
-                    serverPtr->listen_sock) {                                                                           /* If the descriptor chosen is the listen socket, there is new connection */
+            if (arrfd[i].fd != -1) {
 
-                    socklen = sizeof(client_addr);
-                    conn_sd = accept(serverPtr->listen_sock,
-                                     (struct sockaddr *) &client_addr,
-                                     &socklen);
-                    abort_with_error("accept()", conn_sd == -1);
+                if (arrfd[i].revents & POLLIN) {
 
-                    set_socket_options(conn_sd, SO_KEEPALIVE, 0);
+                    if (arrfd[i].fd == server->listen_sock) {
 
-                    /**************** Searching for a free slot *************************************/
-                    get_mutex(&(thread_pool->mtx));
+                        socklen = sizeof(client_addr);
 
-                    int nE = get_E(
-                            thread_pool,
-                            thread_pool->S,
-                            thread_pool->E);                                                                            /* Finds a free slot in the ring buffer */
+                        conn_sd = accept(server->listen_sock,
+                                         (struct sockaddr *) &client_addr,
+                                         &socklen);
+                        abort_with_error("accept()", conn_sd == -1);
 
-                    thread_pool->E = nE;
-                    //printf("%d\n", thread_pool->E);
+                        printf("%d connsd\n", conn_sd);
 
-                    thread_pool->td_pool[nE].conn_sd = conn_sd;                                                         /* The rest of assignments are done in allocate_pool() */
-                    thread_pool->td_pool[nE].E = nE;
-                    thread_pool->td_pool[nE].client_addr = client_addr;
-                    thread_pool->slot_used[nE] = 1;
+                        set_socket_options(conn_sd, SO_KEEPALIVE, 0);
 
-                    release_mutex(&(thread_pool->mtx));
-                    /******************************************************************************/
+                        /**************** Searching for a free slot *************************************/
+                        get_mutex(&(pool->mtx));
 
-                    write_event_log(log_fp, CONNECTION_ACCEPTED,
-                                    client_addr, NULL);                                                                 /* Keeps track of the client's connection in the log file */
+                        nE = get_E(
+                                pool);                                                                               /* Finds a free slot in the ring buffer */
 
-                    ret = pthread_create(&(thread_data[nE].tid), NULL, handle_client, thread_data+nE);
-                    if (ret) abort_with_error("pthread_create()\n", ret != 0);
+                        pool->arr[nE].conn_sd = conn_sd;                                                                /* The rest of assignments are done in allocate_pool() */
+                        pool->arr[nE].E = nE;
+                        pool->arr[nE].client_addr = client_addr;
+                        pool->arr[nE].timer = 5;
+                        pool->arr[nE].request = 10;
 
-                } else {                                                                                                /* If the invoked descriptor is not the listening socket, new data have been sent to old socket */
+                        release_mutex(&(pool->mtx));
+                        /******************************************************************************/
 
-                    pthread_t tid;
-                    int v;
+                        write_event_log(log_fp, CONNECTION_ACCEPTED,
+                                        client_addr,
+                                        NULL);                                                                          /* Keeps track of the client's connection in the log file */
 
-                    get_mutex(&(thread_pool->mtx));
-                    int E = find_E_for_fd(thread_pool, thread_pool->S, thread_pool->E, array_fd[d].fd);
-                    release_mutex(&(thread_pool->mtx));
+                    } else {
+                        get_mutex(&(pool->mtx));
+                        nE = find_E_for_fd(pool, arrfd[i].fd);
+                        release_mutex(&(pool->mtx));
 
-                    thread_data[E].msg_received = 1;                                                                    /* Utile per il timer */
+                        printf("IN ELSE\n");
 
-                    //printf("\n\nIN ELSE\n\n");
+                        if (nE != -1) {
+                            get_mutex(&(pool->arr[nE].mtx_new_request));
+                                pool->arr[nE].msg_received = 1;                                                         /* Used for the timer */
+                            release_mutex(&(pool->arr[nE].mtx_new_request));
+                        }
+                    }
 
-                    //v = pthread_create(&tid, NULL, handle_client, &(thread_data[E]));
-                    //abort_with_error("pthread_create()", v != 0);
-                    signal_cond(&(thread_data[E].cond_msg));
-
+                    signal_cond(&(pool->arr[nE].cond_msg));
+                    d++;
                     continue;
 
+                } else if (arrfd[i].revents & POLLPRI) {
+                    fprintf(stderr, "POLLPRI\n");
                 }
 
-            } else if (array_fd[d].revents & POLLPRI) {
-                fprintf(stderr, "POLLPRI\n");
             }
+            i++;
 
         }
 
     }
-    /**********************************************************************************************************/
-
-    return EXIT_SUCCESS;
-}
-
-int get_image_to_send(struct image_t *image) {
-
-    int fd;
-    char *image_path = NULL;
-
-    size_t width = 0, height = 0;
-
-    if (image->image_name != NULL) {
-        image_path = catenate_strings(IMAGE_DIR, image->image_name);
-        image_path = catenate_strings(image_path, image->ext);
-    }
-
-    if(image->cached == CACHED_IMAGE) {
-        fd = open_file(image->cache_path, O_RDONLY);
-        if (fd != -1) {
-            image->file_size = get_file_size(fd);
-            image->fd = fd;
-            return CACHED_IMAGE;
-        }
-    } else {
-        fd = open_file(image->cache_path, O_CREAT | O_RDWR);
-    }
-
-    MagickWand *magickWand = NewMagickWand();
-
-    MagickBooleanType result = MagickReadImage(magickWand, image_path);
-    if(result == MagickFalse && !strcmp(image->ext, ".jpg")) {
-        image_path = catenate_strings(IMAGE_DIR, image->image_name);
-        image_path = catenate_strings(image_path, ".jpeg");
-        result = MagickReadImage(magickWand, image_path);
-        if(result == MagickFalse)
-            return IMAGE_NOT_PRESENT;
-    }
-
-    width = image->width ? (size_t) image->width : MagickGetImageWidth(magickWand);
-    height = image->height ? (size_t) image->height : MagickGetImageHeight(magickWand);
-
-    char *format = NULL, *ext = NULL;
-
-    if(image->image_list->extension == JPG) {
-        format = (char *) memory_alloc(5);
-        memcpy(format, ".jpg", 4);
-        format[4] = '\0';
-    } else if((image->image_list->extension == PNG)) {
-        format = (char *) memory_alloc(5);
-        memcpy(format, ".png", 4);
-        format[4] = '\0';
-    } else if((image->image_list->extension == JXR)) {
-        format = (char *) memory_alloc(5);
-        memcpy(format, ".jxr", 4);
-        format[4] = '\0';
-    } else if (image->image_list->extension == WEBP) {
-        format = (char *) memory_alloc(6);
-        memcpy(format, ".webp", 5);
-        format[5] = '\0';
-    }
-
-    MagickSetImageFormat(magickWand, format);
-    MagickSetCompressionQuality(magickWand, (size_t)(image->image_list[0].q * 100));
-    MagickResizeImage(magickWand, width, height, LanczosFilter);
-
-    result = MagickWriteImage(magickWand, image->cache_path);
-    abort_with_error("MagickWriteImage", result == MagickFalse);
-
-    free(image_path);
-
-    DestroyMagickWand(magickWand);
-
-    image->file_size = get_file_size(fd);
-    memcpy(file_map + seek_cache, image->cache_path, 128);
-    seek_cache = (seek_cache + strlen(image->cache_path)) % SIZE_FILE_LISTCACHE;
-
-    image->fd = open_file(image->cache_path, O_RDONLY);
 
 }
 
 void *handle_client(void *arg) {
 
-    struct thread_data *td = (struct thread_data *) arg;                                                                /* Cast useful to retrieve struct thread_data's fields*/
-    td->msg_received = 1;                                                                                               /* A message has been received */
-    struct Request *request = create_request();
+    struct thread_data *td = (struct thread_data *) arg;
+    struct request_t *request = create_request();
     struct image_t *image_info = memory_alloc(sizeof(struct image_t));
 
-    int status_r, ret, v;
-    max_descriptor++;
-    array_fd[td->E].fd = td->conn_sd;
+    int status_r, ret, v, timer;
 
     while (1) {
 
-        get_mutex(&(td->mtx_msg_socket));
+        get_mutex(&(td->mtx_new_request));
+        printf("prima di cond\n");
+        wait_cond(&td->cond_msg,
+                  &td->mtx_new_request);                                                                                /* A message has been received */
+        td->msg_received = 1;
+        max_descriptor++;
+
         int idx = td->idx;
         td->idx = (td->idx + 1) % 5;
 
-
-        td->message[idx] = (char *) memory_alloc(HTTP_MESSAGE_SIZE);
-
-        status_r = receive_message(td, idx);
-        release_mutex(&(td->mtx_msg_socket));
+        status_r = receive_request(td, idx);
+        release_mutex(&(td->mtx_new_request));
 
         switch (status_r) {
 
-            case REQUEST_RECEIVED:                                                                                      /* A request has been sent by the client */
-                ret = parse_message(td->message[idx], &request);
+            case REQUEST_RECEIVED:
+                ret = parse_request(td->message[idx], &request);
                 if (ret == REQUEST_RECEIVED) {
-                    //printf("user agent: %s\n", request->user_agent);
-
                     retrieve_from_DB(request,
-                                     td->connDB);                                                                           /* Here is set also the cache name */
+                                     td->connDB);                                                                       /* Here is set also the cache name */
 
                     image_info->width = request->width;
                     image_info->height = request->height;
@@ -254,7 +183,7 @@ void *handle_client(void *arg) {
                         image_info->cache_path = catenate_strings(IMAGE_CACHE, image_info->cache_name);
                         image_info->cache_path = catenate_strings(image_info->cache_path, image_info->ext);
                     }
-                    if(image_info->image_name != NULL)
+                    if (image_info->image_name != NULL)
                         image_info->image_path = catenate_strings(IMAGE_DIR, image_info->image_name);
 
                     image_info->cached = find_file_in_cache(image_info->cache_path,
@@ -264,19 +193,32 @@ void *handle_client(void *arg) {
                                     td->client_addr, image_info);
 
                     ret = get_image_to_send(image_info);
-                    if(ret == IMAGE_NOT_PRESENT) {
+                    if (ret == IMAGE_NOT_PRESENT) {
                         send_bad_request(td->conn_sd);
-                        thread_pool->slot_used[td->E] = 0;
+                        pool->array_fd[td->E].fd = -1;
                         max_descriptor--;
 
                         free(request->ext);
                         free(request);
 
-
                         shutdown(td->conn_sd, SHUT_RDWR);
                         close(td->conn_sd);
                     } else {
                         v = send_image(td->conn_sd, image_info, request->cmd);
+                        if (v == CONNECTION_CLOSED) {
+                            get_mutex(&(td->mtx_new_request));
+                                td->msg_received = 0;
+                                max_descriptor--;
+                                pool->array_fd[td->E].fd = -1;
+                                shutdown(td->conn_sd, SHUT_RDWR);
+                                close(td->conn_sd);
+
+                            get_mutex(&(pool->mtx));
+                                signal_cond(&pool->cb_not_full);
+                            release_mutex(&(pool->mtx));
+
+                            release_mutex(&(td->mtx_new_request));
+                        }
                     }
 
                 } else if (ret == HEAD_CMD) {
@@ -285,64 +227,48 @@ void *handle_client(void *arg) {
                     send_image(td->conn_sd, &icon, GET_CMD);
                 } else if (ret == MESSAGE_NOT_CORRECT) {
                     send_bad_request(td->conn_sd);
-                    thread_pool->slot_used[td->E] = 0;
-                    max_descriptor--;
-
-                    free(request->ext);
-                    free(request);
-
-                    shutdown(td->conn_sd, SHUT_RDWR);
-                    close(td->conn_sd);
                 }
-                break;
+
+                get_mutex(&(td->mtx_new_request));
+                td->msg_received = 0;
+                //max_descriptor++;
+                pool->array_fd[td->E].fd = td->conn_sd;
+                release_mutex(&(td->mtx_new_request));
 
             case EMPTY_MESSAGE:
-                thread_pool->slot_used[td->E] = 0;
-                max_descriptor--;
-
-                free(request->ext);
-                free(request);
-
-                shutdown(td->conn_sd, SHUT_RDWR);
-                close(td->conn_sd);
-
-                write_event_log(log_fp, LOG_EMPTY_MESSAGE,
-                                td->client_addr, image_info);
-                signal_cond(&(thread_pool->cb_not_full));
-                pthread_exit(NULL);
-
-            case MESSAGE_NOT_CORRECT:
-                //deal with it
-                break;
+                get_mutex(&(td->mtx_new_request));
+                    td->msg_received = 0;
+                    max_descriptor--;
+                    pool->array_fd[td->E].fd = -1;
+                    shutdown(td->conn_sd, SHUT_RDWR);
+                    if(close(td->conn_sd) == -1){
+                        fprintf(stderr, "Error in close(), errno %d\n strerror %s\n", errno, strerror(errno));
+                    };
+                signal_cond(&(pool->cb_not_full));
+                release_mutex(&(td->mtx_new_request));
+                continue;
 
             default:
                 break;
         }
 
-        get_mutex(&(td->mtx_msg_socket));
-        wait_cond(&(td->cond_msg), &(td->mtx_msg_socket));
-        release_mutex(&(td->mtx_msg_socket));
+        timer = handle_timer(td);
+        if (timer == 0) {
+            get_mutex(&(td->mtx_new_request));
+                max_descriptor--;
+                pool->array_fd[td->E].fd = -1;
+                shutdown(td->conn_sd, SHUT_RDWR);
+                close(td->conn_sd);
+                td->msg_received = 0;
+                signal_cond(&pool->cb_not_full);
 
-        /************** After release condition *****************************/
+            release_mutex(&(td->mtx_new_request));
 
-        /*if (td->msg_received == 1)
+            printf("dopo timer\n");
+        } else {
+            signal_cond(&td->cond_msg);
             continue;
-        else {
-            //operazioni di uscita
-            free(image_info);
-            free(request);
-            pthread_exit(NULL);
-        }*/
-
-        //get_mutex(&(thread_pool->mtx));
-        //while (pool->S == pool->E)
-        //    wait_for_free_slot(&(pool->cb_not_empty), &(pool->mtx));
-
-        //thread_pool->S = (thread_pool->S + 1) % NUM_THREAD_POOL;
-        //signal_cond(&(thread_pool->cb_not_full));
-
-        //release_mutex(&(thread_pool->mtx));
-
+        }
     }
 
 }
@@ -380,7 +306,7 @@ void set_socket_options(int sockfd, int keep_alive, int reuse_addr) {
 
 }
 
-void set_server_address(ServerPtr serverPtr) {
+void set_server_address(struct server_t *serverPtr) {
 
     struct sockaddr_in servaddr;
 
@@ -400,7 +326,7 @@ void bind_address(int listen_sock, struct sockaddr_in serv_addr) {
     }
 }
 
-void init_pollfd() {
+void init_pollfd(struct pollfd *array_fd) {
 
     int i = 0;
 
@@ -417,77 +343,60 @@ char *get_cache_file() {
     int fd;
 
     fd = open_file(IMAGE_CACHE_FILE, O_CREAT | O_EXCL | O_RDWR);
-    if(fd != -1) {
-        abort_with_error("lseek()", lseek(fd, SIZE_FILE_LISTCACHE, SEEK_SET) == -1);                                    /* Makes a hole in the file */
+    if (fd != -1) {
+        abort_with_error("lseek()", lseek(fd, SIZE_FILE_LISTCACHE, SEEK_SET) ==
+                                    -1);                                    /* Makes a hole in the file */
         abort_with_error("write()", write(fd, &fd, 1) != 1);
     } else {
         fd = open_file(IMAGE_CACHE_FILE, O_RDWR);
     }
 
-    char *map = mmap(NULL, SIZE_FILE_LISTCACHE, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    char *map = mmap(NULL, SIZE_FILE_LISTCACHE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     abort_with_error("mmap()", map == MAP_FAILED);
 
     errno = 0;
-    mlock(map, SIZE_FILE_LISTCACHE);                                                                                    /* Keeps file in memory in order to avoid I/O operations */
+    mlock(map,
+          SIZE_FILE_LISTCACHE);                                                                                    /* Keeps file in memory in order to avoid I/O operations */
     printf("%s\n", strerror(errno));
 
     return map;
 
 }
 
-ServerPtr Server() {
-    ServerPtr serverPtr = (ServerPtr) memory_alloc(sizeof(struct Server));
-    serverPtr->listen_sock = create_socket();
-    serverPtr->set_server_address = set_server_address;
-    serverPtr->bind_address = bind_address;
-    serverPtr->image_list = image_list;
-    serverPtr->allocate_pool = allocate_pool;
-    serverPtr->set_socket_options = set_socket_options;
-    serverPtr->init_pollfd = init_pollfd;
-    //serverPtr->list_file_in_cache = list_file_in_cache;
+struct server_t *
+Server() {                                                                                             /* Allocates memory for the server */
+    struct server_t *serverPtr = (struct server_t *) memory_alloc(sizeof(struct server_t));
     return serverPtr;
 }
 
-ServerPtr create_server() {
+struct server_t *init_server() {
 
-    ServerPtr serverPtr = Server();
+    struct server_t *serverPtr = Server();
 
-    serverPtr->set_server_address(serverPtr);
-    serverPtr->bind_address(serverPtr->listen_sock, serverPtr->serv_addr);
-    serverPtr->image_list();
+    serverPtr->listen_sock = create_socket();
+    set_server_address(serverPtr);
+    bind_address(serverPtr->listen_sock, serverPtr->serv_addr);
+    image_list();
 
     if (listen(serverPtr->listen_sock, BACKLOG) < 0) {
         perror("Errore in listen");
         exit(EXIT_FAILURE);
     }
 
-    serverPtr->set_socket_options(serverPtr->listen_sock, 0,
-                                  SO_REUSEADDR);                                                                        /* It prevents error on bind() for subsequent run of the program */
+    set_socket_options(serverPtr->listen_sock, 0,
+                       SO_REUSEADDR);                                                                        /* It prevents error on bind() for subsequent run of the program */
 
     set_number_of_connections();                                                                                        /* Allows one connection per thread */
 
-    serverPtr->thread_pool = serverPtr->allocate_pool(
-            NUM_THREAD_POOL);                                                                                           /* Preallocation of NUM_THREAD_POOL threads */
+    serverPtr->pool = allocate_pool(
+            NUM_THREAD_POOL);                                                                   /* Preallocation of NUM_THREAD_POOL threads */
 
-    serverPtr->init_pollfd();                                                                                             /* Initialization of the pool of fds that are going to be checked in poll()*/
-    array_fd[0].fd = serverPtr->listen_sock;
-    array_fd[0].events = POLLIN | POLLPRI;
-    serverPtr->thread_pool->slot_used[0] = 1;
+    init_pollfd(
+            serverPtr->pool->array_fd);                                                                             /* Initialization of the pool of fds that are going to be checked in poll()*/
+    serverPtr->pool->array_fd[0].fd = serverPtr->listen_sock;
+    serverPtr->pool->array_fd[0].events = POLLIN | POLLPRI;
 
     log_fp = open_fp(SERVER_LOG_PATH, "a+");
-
-    /* OPERATION NOT PERMITTED
-struct rlimit rlim;
-rlim.rlim_cur = 524288;
-rlim.rlim_max = 524288;
-
-errno = 0;
-if(setrlimit(RLIMIT_MEMLOCK, &rlim) == -1)
-    fprintf(stderr, "%s\n", strerror(errno));
-
-getrlimit(RLIMIT_MEMLOCK, &rlim);
-printf("max mem %ld %ld \n", rlim.rlim_cur, rlim.rlim_max);
-    */
 
     file_map = get_cache_file();
     seek_cache = 0;
@@ -498,6 +407,7 @@ printf("max mem %ld %ld \n", rlim.rlim_cur, rlim.rlim_max);
     icon.file_size = get_file_size(icon.fd);
     /*****************************************************/
 
+
+
     return serverPtr;
 }
-

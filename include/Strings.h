@@ -23,4 +23,6 @@ void build_image_name_cache(char **cache_name, char *image_name, float q, int wi
 char *convert_long_to_string(long v);
 
 char *catenate_strings(char *s1, char *s2);
+
+size_t build_message(off_t file_size, char *ext, char **msg, struct image_t *image);
 #endif //IMAGEAPP_STRINGS_H

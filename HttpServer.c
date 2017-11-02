@@ -37,7 +37,7 @@ int main() {
     int ret;
     int i, nE;
     nfds_t d;                                                                                                           /* Iterator */
-    max_descriptor = 1;                                                                                          /* Number of descriptors to be checked */
+    max_descriptor = 1;                                                                                                 /* Number of descriptors to be checked */
 
     socklen_t socklen;
     struct sockaddr_in client_addr;
@@ -52,7 +52,7 @@ int main() {
         /************************* Poll descriptors ********************************************/
         ready = poll(arrfd, max_descriptor, 1000);
         if (ready ==
-            -1) {                                                                                              /* If an error occurs in poll() */
+            -1) {                                                                                                       /* If an error occurs in poll() */
             fprintf(stderr, "Error in poll()\n");
             if (errno == EBADF || errno == ENOMEM) {
                 fprintf(stderr, "in select, errno %d\n", errno);
@@ -72,7 +72,7 @@ int main() {
         i = 0;
 
         while (d <
-               max_descriptor) {                                                                                     /* Iterate over d ready descriptors */
+               max_descriptor) {                                                                                        /* Iterate over d ready descriptors */
 
             if (arrfd[i].fd != -1) {
 
@@ -95,7 +95,7 @@ int main() {
                         get_mutex(&(pool->mtx));
 
                         nE = get_E(
-                                pool);                                                                               /* Finds a free slot in the ring buffer */
+                                pool);                                                                                  /* Finds a free slot in the ring buffer */
 
                         pool->arr[nE].conn_sd = conn_sd;                                                                /* The rest of assignments are done in allocate_pool() */
                         pool->arr[nE].E = nE;
@@ -114,8 +114,6 @@ int main() {
                         get_mutex(&(pool->mtx));
                         nE = find_E_for_fd(pool, arrfd[i].fd);
                         release_mutex(&(pool->mtx));
-
-                        printf("IN ELSE\n");
 
                         if (nE != -1) {
                             get_mutex(&(pool->arr[nE].mtx_new_request));
@@ -152,7 +150,6 @@ void *handle_client(void *arg) {
     while (1) {
 
         get_mutex(&(td->mtx_new_request));
-        printf("prima di cond\n");
         wait_cond(&td->cond_msg,
                   &td->mtx_new_request);                                                                                /* A message has been received */
         td->msg_received = 1;
@@ -169,8 +166,8 @@ void *handle_client(void *arg) {
             case REQUEST_RECEIVED:
                 ret = parse_request(td->message[idx], &request);
                 if (ret == REQUEST_RECEIVED) {
-                    retrieve_from_DB(request,
-                                     td->connDB);                                                                       /* Here is set also the cache name */
+                    retrieve_dim_from_DB(request,
+                                         td->connDB);                                                                       /* Here is set also the cache name */
 
                     image_info->width = request->width;
                     image_info->height = request->height;
@@ -183,8 +180,10 @@ void *handle_client(void *arg) {
                         image_info->cache_path = catenate_strings(IMAGE_CACHE, image_info->cache_name);
                         image_info->cache_path = catenate_strings(image_info->cache_path, image_info->ext);
                     }
-                    if (image_info->image_name != NULL)
+                    if (image_info->image_name != NULL) {
                         image_info->image_path = catenate_strings(IMAGE_DIR, image_info->image_name);
+                        image_info->image_path = catenate_strings(image_info->image_path, image_info->ext);
+                    }
 
                     image_info->cached = find_file_in_cache(image_info->cache_path,
                                                             file_map);                                                  /* Scan cache of images. One I/O instead of two */
@@ -255,6 +254,7 @@ void *handle_client(void *arg) {
         timer = handle_timer(td);
         if (timer == 0) {
             get_mutex(&(td->mtx_new_request));
+
                 max_descriptor--;
                 pool->array_fd[td->E].fd = -1;
                 shutdown(td->conn_sd, SHUT_RDWR);
@@ -263,8 +263,6 @@ void *handle_client(void *arg) {
                 signal_cond(&pool->cb_not_full);
 
             release_mutex(&(td->mtx_new_request));
-
-            printf("dopo timer\n");
         } else {
             signal_cond(&td->cond_msg);
             continue;
@@ -363,8 +361,7 @@ char *get_cache_file() {
 
 }
 
-struct server_t *
-Server() {                                                                                             /* Allocates memory for the server */
+struct server_t *Server() {                                                                                             /* Allocates memory for the server */
     struct server_t *serverPtr = (struct server_t *) memory_alloc(sizeof(struct server_t));
     return serverPtr;
 }

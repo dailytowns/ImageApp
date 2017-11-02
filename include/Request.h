@@ -13,13 +13,15 @@ enum rqst_stat {OK, IMAGE_REQUESTED, MESSAGE_NOT_CORRECT, REQUEST_TOO_LONG,
     EMPTY_PATH, EMPTY_MESSAGE, IMAGE_NOT_PRESENT, ICON_REQUESTED, REQUEST_RECEIVED,
     HEAD_CMD, GET_CMD, ERROR_SENDING_MESSAGE, CONNECTION_CLOSED};
 
+/**
+ * It gathers the information parsed from the HTTP message received from the client
+ */
 struct request_t {
     int width;
     int height;
     int cmd;
     char *user_agent;
     char *image_name;
-    char *image_path;
     ImageNode *image_list;
     char *cache_name;
     char *ext;

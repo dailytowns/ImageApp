@@ -20,7 +20,7 @@ static struct cache_query cache[256];
 unsigned long long int idx_cache = 0;
 pthread_mutex_t db_mtx;
 
-void retrieve_from_DB(struct request_t *request, MYSQL *conn) {
+void retrieve_dim_from_DB(struct request_t *request, MYSQL *conn) {
 
     MYSQL_RES *res = NULL;
     MYSQL_ROW row = NULL;

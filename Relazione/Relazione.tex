@@ -1,16 +1,22 @@
-\documentclass[a4paper, titlepage]{article}
+\documentclass[paper=a4, oneside, fontsize=14pt, titlepage]{article}
 \usepackage[italian]{babel}
 \usepackage[utf8x]{inputenc}
 \usepackage{newlfont}
 \usepackage{makeidx}
-\usepackage{hyperref}													%Visualizzazione di url
+\usepackage{hyperref}										%Visualizzazione di url
 
-%opening
-\title{}
-\author{}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{Relazione al progetto}
+\rfoot{Pagina \thepage}
+\fancyfoot{} % clear all footer fields
+\fancyfoot[LE,RO]{Pagina \thepage}           % page number in "outer" position of footer line
+
+\usepackage{tikz}
+\usetikzlibrary{trees}
+\usetikzlibrary{positioning}
 
 \begin{document}
-	
 	\begin{titlepage}
 		\begin{center}
 			{{\Large{\textsc{Università degli Studi di Roma Tor Vergata}}}} \rule[0.1cm]{5.8cm}{0.5mm}\\
@@ -23,7 +29,11 @@
 			{\LARGE{\bf Adattamento dinamico di contenuti statici}}\\
 			\vspace{19mm} {\large{\bf Relazione al progetto di Ingegneria di Internet e del Web}}
 		\end{center}
-		\vspace{40mm}
+		\vspace{10mm}
+		\begin{center}
+			\includegraphics[scale=0.3]{./images/world.jpg}
+		\end{center}
+		\vspace{10mm}
 		\par
 		\noindent
 		\begin{minipage}[t]{0.47\textwidth}
@@ -46,18 +56,108 @@
 	\newpage
 	
 	\section{Introduzione}
-	\begin{flushleft}
-		Questa relazione ha l'intento di illustrare, con la maggior chiarezza possibile, quanto è stato realizzato nell'ambito dello sviluppo di questo progetto relativo al corso di Ingegneria di Internet e del Web. Verranno illustrate altresì le scelte architetturali adottate nella realizzazione del sistema proposto, chiarendone i motivi alla base. All'interno della cartella principale del cd, è presente inoltre una presentazione contenente una raccolta di appunti stesi durante la realizzazione del progetto.\newline
-		Durante qualsiasi comunicazione all'interno della rete \textit{Internet} troviamo un'entità che richiede una risorsa, sia essa una pagina HTML, un'immagine JPEG o un frammento di un film che si sta guardando in streaming. Il numero di entità che possono fornire la risorsa varia tra \textit{1} ed un arbitrario \textit{n} a seconda dell'architettura adottata per la realizzazione dell'applicazione che si sta utilizzando per richiedere la risorsa:
+		\begin{flushleft}
+			Questa relazione ha l'intento di illustrare, con la maggior chiarezza possibile, quanto è stato realizzato nell'ambito dello sviluppo di questo progetto relativo al corso di Ingegneria di Internet e del Web. Verranno illustrate altresì le scelte architetturali adottate nella realizzazione del sistema proposto, chiarendone i motivi alla base. All'interno della cartella principale del cd, è presente inoltre una presentazione contenente una raccolta di appunti stesi durante la realizzazione del progetto.
+		\end{flushleft}
+		\begin{center}
+			\begin{tikzpicture}
+			\draw (0,0) -- (2,0);
+			\end{tikzpicture}
+			\hspace{1cm}
+			\begin{tikzpicture}
+			\draw (0,0) -- (2,0);
+			\end{tikzpicture}
+		\end{center}
+		\begin{flushleft}
+			Durante qualsiasi comunicazione all'interno della rete \textit{Internet} troviamo un'entità che richiede una risorsa, sia essa una pagina HTML, un'immagine JPEG o un frammento di un film che si sta guardando in streaming. Il numero di entità che possono fornire la risorsa varia tra \textit{1} ed un arbitrario \textit{n} a seconda dell'architettura adottata per la realizzazione dell'applicazione che si sta utilizzando per richiedere la risorsa:
+		\end{flushleft}
 		\begin{itemize}
 			\item se l'applicazione è stata realizzata secondo l'architettura \textit{client-server} sarà una sola entità a fornire la risorsa richiesta, ovvero il server stesso
-			\item nel caso in cui l'applicazione sia stata progettata secondo l'architettura \textit{peer-to-peer}, la risorsa verrà fornita in generale da n entità che collaborano a tale scopo
+			\item nel caso in cui l'applicazione sia stata progettata secondo l'architettura \textit{peer-to-peer}, la risorsa verrà fornita in generale da n entità che collaborano a tale scopo. L'elemento server centrale non viene necessariamente rimosso in quanto potrebbe risultare utile nella coordinazione fra i peer.
 		\end{itemize}
-	...
-	
-	Il processo di sviluppo che è stato scelto per la realizzazione di questo progetto prende le mosse dai processi iterativi, i quali permettono di tornare indietro nelle fasi dello sviluppo per correggere o ampliare quanto steso precedentemente.
-	\end{flushleft}
-
+		\begin{center}
+			\begin{tikzpicture}
+				%Styles for the nodes
+				[client/.style={circle, draw=blue=!80, fill=blue!30}]
+				
+				\node (server) at (0,0) [circle, draw=green!80, fill=green!30, thick] {Server};
+				\node[client] (client1) [above right = of server] {client};
+				\node[client] (client2) [above left = of server] {client};
+				\node[client] (client3) [below right = of server] {client};
+				\node[client] (client4) [below left = of server] {client};
+				
+				\draw [<->, very thick] (server.north east) -- (client1.south);
+				\draw [<->, very thick] (server.north west) -- (client2.south);
+				\draw [<->, very thick] (server.south east) -- (client3.north);
+				\draw [<->, very thick] (server.south west) -- (client4.north);
+			\end{tikzpicture}
+			\hspace{2cm}
+			\begin{tikzpicture}
+				%Styles for the nodes
+				[client/.style={circle, draw=blue=!80, fill=blue!30, thick}]
+				
+				\node (server) at (0,0) [circle, draw=green!80, fill=green!30, thick] {Server};
+				\node[client] (client1) [above right = of server] {peer};
+				\node[client] (client2) [above left = of server] {peer};
+				\node[client] (client3) [below right = of server] {peer};
+				\node[client] (client4) [below left = of server] {peer};
+				
+				\draw [<->, very thick] (server.north east) -- (client1.south);
+				\draw [<->, very thick] (server.north west) -- (client2.south);
+				\draw [<->, very thick] (server.south east) -- (client3.north);
+				\draw [<->, very thick] (server.south west) -- (client4.north);
+				\draw [<->, very thick] (client1.west) -- (client2.east);
+				\draw [<->, very thick] (client1.south) -- (client3.north);
+				\draw [<->, very thick] (client3.west) -- (client4.east);
+				\draw [<->, very thick] (client4.north) -- (client2.south);
+			\end{tikzpicture}
+		\end{center}
+		\vspace{5mm}
+		\begin{flushleft}
+			Nel caso di questo progetto, ci si riferirà chiaramente all'architettura \textit{client-server}.\newline
+			
+			Il processo di sviluppo che è stato adottato per la realizzazione di questo progetto prende le mosse dai processi iterativi ed incrementali, un esempio su tutti è lo \textit{Unified Process}. Un processo di sviluppo è \textit{iterativo} se, terminato il flusso di lavoro relativo ad una fase, è possibile ritornare all'inizio del flusso per correggere gli errori precedenti, ad esempio dovuti ad interpretazioni non corrette dei requisiti. \'{E} \textit{incrementale} dal momento che ad ogni \textit{iterazione} è possibile ampliare il progetto implementando nuovi requisiti, o semplicemente aggiungendoli all'attenzione dei progettisti. Senza entrare nel dettaglio di un processo di sviluppo particolare, si sottolinea che ognuno di essi ha una fase di inizializzazione più o meno complessa.\newline
+			
+			\'{E} da sottolineare il fatto che ogni \textit{iterazione} restituisce una versione del sistema \textit{parzialmente completa} che costituisce un punto di partenza per l'iterazione successiva. Dunque non si riparte mai da zero, a meno di gravi errori commessi nelle fasi precedenti.\newline
+			
+			La fase di \textit{\textbf{inizializzazione}} relativa a questo progetto è stata particolarmente lunga e laboriosa in quanto mancava una buona padronanza dell'argomento, ma soprattutto della maggior parte delle insidie in cui ci si può imbattere nel linguaggio C, la manipolazione delle stringhe un esempio su tutti.\newline
+			Di conseguenza, la fase di inizializzazione è stata sfruttata principalmente per prendere dimestichezza sia con l'argomento sia con il linguaggio. \'{E} stato realizzato uno scheletro del programma affinché si potesse avere una base da ampliare e migliorare.\newline
+			
+			In definitiva, la fase di inizializzazione ha scorso i requisiti funzionali del sistema da realizzare e ne ha implementato le funzionalità fondamentali. Questo approccio ha avuto il vantaggio di restituire un eseguibile di base del sistema, nonché del codice che con probabilità molto alta sarebbe stato riutilizzato come base per ampliare le funzionalità già implementate.\newline
+			
+			Fatta salva questa relazione, non è stata approfondita la parte di documentazione, di notevole importanza in un processo di sviluppo come lo \textit{Unified Process} o la sua versione proprietaria di \textit{Rational} RUP.	
+		\end{flushleft}
+		
+		\subsection{Contenuto del CD}
+			\begin{flushleft}
+				Di seguito viene riportato il contenuto del CD contenente sia i sorgenti del programma realizzato sia il sorgente di questa stessa relazione.
+			\end{flushleft}
+			\begin{tikzpicture}			
+				\tikzstyle{every node}=[draw=black, thick, anchor=west]
+				\tikzstyle{selected}=[draw=red,fill=red!30]
+				\tikzstyle{optional}=[dashed,fill=gray!50]
+				\node {ImageApp}
+				child { node {doc}}		
+				child { node {fonts}}
+				child { node {source}}
+				child { node [selected] {tex}
+					child { node {generic}}
+					child { node [optional] {latex}}
+					child { node {plain}}
+				}
+				child [missing] {}				
+				child [missing] {}				
+				child [missing] {}				
+				child { node {texdoc}};
+			\end{tikzpicture}
+			
+		\subsection{Installazione del programma}
+			\begin{flushleft}
+				La procedura di installazione è stata riportata esaurientemente anche nella presentazione \textit{Presentazione.odp} affinché il lettore potesse avere ugualmente un supporto grafico immediato nella fase di installazione anche se non interessato a questa relazione.\newline
+				
+				
+			\end{flushleft}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Traccia del progetto %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	\section{Traccia del progetto}
 	\begin{flushleft}
 		Lo scopo del progetto è quello di realizzare in linguaggio C usando l'API del socket di Berkeley un Web	server concorrente in grado di adattare dinamicamente il contenuto statico fornito in base alle caratteristiche del dispositivo del client. Il server dovrà fornire:
@@ -129,6 +229,8 @@
 		http://www.linuxbrigade.com/reduce-time\_wait-socket-connections/
 		
 		http://lkml.iu.edu/hypermail/linux/kernel/0106.1/1154.html
+		
+		http://www.texample.net/tikz/examples/filesystem-tree/
 	\end{flushleft}
 	
 	\section{Strutture principali utilizzate dal programma}

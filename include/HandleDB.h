@@ -11,7 +11,17 @@
 
 enum DB_stat {NO_VALUE_IN_DB, VALUE_DB};
 
-void retrieve_from_DB(struct request_t *request, MYSQL *conn);
+/**
+ * Function: retrieve_from_DB
+ *
+ * This function retrieves the dimensions of the display and saves them
+ * in the request parameter
+ *
+ * @param request A request
+ * @param conn Connection with the database
+ * @return A connection to the database ready to use
+ */
+void retrieve_dim_from_DB(struct request_t *request, MYSQL *conn);
 
 /**
  * Function: connect_DB

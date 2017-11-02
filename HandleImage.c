@@ -34,11 +34,6 @@ int get_image_to_send(struct image_t *image) {
 
     size_t width = 0, height = 0;
 
-    if (image->image_name != NULL) {
-        image_path = catenate_strings(IMAGE_DIR, image->image_name);
-        image_path = catenate_strings(image_path, image->ext);
-    }
-
     if (image->cached == CACHED_IMAGE) {
         fd = open_file(image->cache_path, O_RDONLY);
         if (fd != -1) {
@@ -65,7 +60,6 @@ int get_image_to_send(struct image_t *image) {
     height = image->height ? (size_t) image->height : MagickGetImageHeight(magickWand);
 
     char *format = NULL;
-    //char *ext = NULL;
 
     if (image->image_list->extension == JPG) {
         format = (char *) memory_alloc(5);
@@ -86,7 +80,7 @@ int get_image_to_send(struct image_t *image) {
     }
 
     MagickSetImageFormat(magickWand, format);
-    MagickSetCompressionQuality(magickWand, (size_t) (image->image_list[0].q * 100));
+    MagickSetCompressionQuality(magickWand, (size_t) (image->image_list[0].q * 100));                                   /* It is chosen the first, could be substituted with a selection algorithm*/
     MagickResizeImage(magickWand, width, height, LanczosFilter);
 
     result = MagickWriteImage(magickWand, image->cache_path);

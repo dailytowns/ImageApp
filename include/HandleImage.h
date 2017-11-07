@@ -37,6 +37,7 @@ struct image_t {
     int cached;                                                                                                         /**< If equal to 1 the image is present in cache */
     char *cache_path;                                                                                                   /**< Path of the image stored in cache */
     char *image_path;                                                                                                   /**< Path of the image stored in images folder */
+    int colors;                                                                                                         /**< Number of colors in the output image */
     /*@{*/
 };
 

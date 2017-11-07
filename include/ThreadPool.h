@@ -11,10 +11,15 @@
 
 #include "Config.h"
 
+/**
+ * This struct abstracts a slot in the circular buffer used to handle the clients
+ * requesting images to server
+ *
+ */
 struct thread_data {
-    int *fd;
+    /*@{*/
     int conn_sd;
-    char **message;                                     //Deals with (?) pipeline
+    char **message;
     pthread_t tid;
     pthread_mutex_t mtx_msg_socket;
     pthread_mutex_t mtx_new_request;
@@ -27,6 +32,8 @@ struct thread_data {
     struct sockaddr_in client_addr;
     int timer;
     int request;
+    /*@{*/
+    int idx_pool;
 };
 
 /**
@@ -41,8 +48,9 @@ struct pool_t {
     pthread_cond_t cb_not_full;                                                                                         /**< Condition variable that is used to signal or wait for buffer not full */
     pthread_cond_t cb_not_empty;                                                                                        /**< Condition variable that is used to signal or wait for buffer not empty */
     struct thread_data *arr;                                                                                            /**< Pointer to the ring buffer */
+    //struct pollfd array_fd[NUM_THREAD_POOL];                                                                            /**< Array of descriptors to be poll()ed
+    struct pollfd *array_fd;                                                                                            /**< Array of descriptors to be poll()ed
     /*@{*/
-    struct pollfd array_fd[NUM_THREAD_POOL];
 };
 
 int handle_timer(struct thread_data *td);

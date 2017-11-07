@@ -39,7 +39,6 @@ MYSQL *connect_DB();
  * This function updates the number of allowed parallel connections to database
  * in order to support the number of parallel queries made by threads
  *
- * @param
  * @return void
  */
 void set_number_of_connections();

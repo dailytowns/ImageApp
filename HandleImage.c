@@ -32,7 +32,7 @@ int get_image_to_send(struct image_t *image) {
     int fd;
     char *image_path = NULL;
 
-    size_t width = 0, height = 0;
+    size_t width = 0, height = 0, colors = 0;
 
     if (image->cached == CACHED_IMAGE) {
         fd = open_file(image->cache_path, O_RDONLY);
@@ -47,7 +47,7 @@ int get_image_to_send(struct image_t *image) {
 
     MagickWand *magickWand = NewMagickWand();
 
-    MagickBooleanType result = MagickReadImage(magickWand, image_path);
+    MagickBooleanType result = MagickReadImage(magickWand, image->image_path);
     if (result == MagickFalse && !strcmp(image->ext, ".jpg")) {
         image_path = catenate_strings(IMAGE_DIR, image->image_name);
         image_path = catenate_strings(image_path, ".jpeg");
@@ -58,6 +58,7 @@ int get_image_to_send(struct image_t *image) {
 
     width = image->width ? (size_t) image->width : MagickGetImageWidth(magickWand);
     height = image->height ? (size_t) image->height : MagickGetImageHeight(magickWand);
+    colors = image->colors ? (size_t) image->colors : MagickGetImageColors(magickWand);
 
     char *format = NULL;
 
@@ -77,11 +78,16 @@ int get_image_to_send(struct image_t *image) {
         format = (char *) memory_alloc(6);
         memcpy(format, ".webp", 5);
         format[5] = '\0';
+    } else if (image->image_list->extension == ALL_EXT) {
+        format = (char *) memory_alloc(5);
+        memcpy(format, ".jpg", 4);
+        format[4] = '\0';
     }
 
     MagickSetImageFormat(magickWand, format);
     MagickSetCompressionQuality(magickWand, (size_t) (image->image_list[0].q * 100));                                   /* It is chosen the first, could be substituted with a selection algorithm*/
     MagickResizeImage(magickWand, width, height, LanczosFilter);
+    MagickQuantizeImage(magickWand, colors, RGBColorspace, 8, DitherVirtualPixelMethod, MagickFalse);
 
     result = MagickWriteImage(magickWand, image->cache_path);
     abort_with_error("MagickWriteImage", result == MagickFalse);

@@ -11,6 +11,8 @@
 
 #include "Config.h"
 
+struct pollfd array_fd[256];
+
 struct server_t {
     struct sockaddr_in serv_addr;
     int listen_sock;
@@ -18,6 +20,8 @@ struct server_t {
     struct pollfd array_fd[NUM_THREAD_POOL];
     FILE *log_fp;
 };
+
+void child_job(int idx_pool);
 
 /**
  * Function: create_socket
@@ -84,5 +88,4 @@ void *handle_client(void *arg);
  * @return A struct Server * ready to be used
  */
 struct server_t *init_server();
-
 #endif //IMAGEAPP_HTTPSERVER_H

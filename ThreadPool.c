@@ -16,28 +16,23 @@ struct pool_t *allocate_pool(int num_threads) {
 
     int i = 0;
     pthread_t tid = 0;
+    long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
 
     /* Initializes every struct thread_data that are to be in the pool */
     while (i < num_threads) {
 
         (pool_thread[i]).message = (char **) memory_alloc(
-                5 * sizeof(char *));                                          //Allocated five slots for messages
+                5 * sizeof(char *));                                                                                    /* Allocated five slots for messages */
         int msg = 0;
         while (msg < 5) {
-            (pool_thread[i]).message[msg] = memory_alloc(HTTP_MESSAGE_SIZE);
+            (pool_thread[i]).message[msg] = memory_alloc(HTTP_MESSAGE_SIZE);                                            /* Slots of 512 bytes */
             msg++;
         }
-        (pool_thread[i]).fd = (int *) memory_alloc(
-                5 * sizeof(int));                                                    //Allocated five slots for messages
         (pool_thread[i]).tid = tid;
-        (pool_thread[i]).conn_sd = 0;
-        (pool_thread[i]).idx = 0;
-        (pool_thread[i]).timer = 10;
-        (pool_thread[i]).msg_received = 0;
 
         printf("i db %d\n", i);
 
-        (pool_thread[i]).connDB = connect_DB();
+        (pool_thread[i]).connDB = connect_DB();                                                                         /* Every thread gets its connection to the db */
 
         init_mutex(&((pool_thread[i]).mtx_msg_socket));
         init_mutex(&((pool_thread[i]).mtx_new_request));
@@ -75,6 +70,9 @@ struct pool_t *allocate_pool(int num_threads) {
     }
     /************************************************************************************************************/
 
+    pool->array_fd = (struct pollfd *)memory_alloc(num_thread_pool * sizeof(struct pollfd));
+
+
     return pool;
 }
 
@@ -82,14 +80,14 @@ int find_E_for_fd(struct pool_t *pool, int fd) {
 
     int i = 0;
 
-    while (i < NUM_THREAD_POOL) {
+    while (i < num_thread_pool) {
 
         if (pool->array_fd[i].fd == fd)
             return i;
         i++;
     }
 
-    if (i == NUM_THREAD_POOL)
+    if (i == num_thread_pool)
         return -1;
 
 }
@@ -101,17 +99,17 @@ int get_E(struct pool_t *pool) {
     int nE;
 
     while (1) {
-        while (i < NUM_THREAD_POOL) {
-            nE = (pool->E + i) % NUM_THREAD_POOL;
+        while (i < num_thread_pool) {
+            nE = (pool->E + i) % num_thread_pool;
             if (pool->array_fd[nE].fd == -1) {
-                pool->E = (nE + 1) % NUM_THREAD_POOL;                                                                   /* Start from next index the second time */
+                pool->E = (nE + 1) % num_thread_pool;                                                                   /* Start from next index the second time */
                 signal_cond(&(pool->cb_not_empty));
                 return nE;
             }
             i++;
         }
 
-        if (i == NUM_THREAD_POOL) {
+        if (i == num_thread_pool) {
             //get_mutex(&pool->mtx);
             wait_cond(&(pool->cb_not_full), &(pool->mtx));
             i = 0;

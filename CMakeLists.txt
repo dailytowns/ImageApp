@@ -2,16 +2,17 @@ cmake_minimum_required(VERSION 3.8)
 project(ImageApp)
 
 set(CMAKE_C_STANDARD 90)
+set(CMAKE_CXX_FLAGS -Wall -Wextra)
 
 add_executable(httpserver HttpServer.c Utils.c ThreadPool.c Request.c Log.c
-                Strings.c HandleDB.c HandleImage.c include)
+                Strings.c HandleDB.c HandleImage.c Config.c include)
 #add_executable(ParseWurfl ${SOURCE_FILES_XML})
 #add_executable(TimerHandler TimerHandler.c)
 
 #add_executable(TEST TestCurl.c)
 #target_link_libraries(TEST curl)
 
-target_link_libraries(httpserver pthread)
+
 #target_link_libraries(TEST pthread)
 
 ###### PkgConfig ########
@@ -48,4 +49,5 @@ if(PKG_CONFIG_FOUND)
         add_definitions(${LIBMYSQLCLIENT_CFLAGS} ${LIBMYSQLCLIENT_CFLAGS_OTHER})
     endif()
 endif()
+target_link_libraries(httpserver pthread)
 #######################

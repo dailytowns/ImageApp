@@ -10,7 +10,7 @@
 
 #include "HandleImage.h"
 
-enum event_type {CONNECTION_ACCEPTED, LOG_IMAGE_REQUESTED, LOG_EMPTY_MESSAGE};
+enum event_type {CONNECTION_ACCEPTED, LOG_IMAGE_REQUESTED, LOG_EMPTY_MESSAGE, LOG_MAX_NUM_REQUESTS, LOG_IMAGE_NOT_PRESENT};
 
 /**
  * Function: write_event_log

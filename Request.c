@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <sys/sendfile.h>
 
 #include "include/HtmlResponse.h"
 #include "include/Request.h"
@@ -25,7 +26,7 @@ int receive_request(struct thread_data *td, int idx) {
     ssize_t v = 0, received = 0;
     size_t tot = HTTP_MESSAGE_SIZE;
     int error;
-    int retry = 2;                         //avoid errno = EAGAIN
+    int retry = 2;
 
     while (retry >= 0) {
 
@@ -40,7 +41,7 @@ int receive_request(struct thread_data *td, int idx) {
             if ((error == EINTR) || (error == EAGAIN)) {
                 retry--;
                 continue;
-            } else if(error == ECONNRESET) {
+            } else if((error == ECONNRESET) || (errno == EBADF)) {
                 return EMPTY_MESSAGE;
             } else {
                 fprintf(stderr, "recv() in receive_message(), errno = %d", error);
@@ -467,7 +468,7 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {                   
     msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
     msg[511] = '\0';
 
-    size_t len_header = build_message(image->file_size, image->ext, &msg, image);
+    size_t len_header = build_message(image->file_size, image->ext, &msg, image, NULL);
     ssize_t s = 0;
     size_t sent = 0;
 
@@ -486,8 +487,8 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {                   
     /********************************************/
 
     /* sendfile() leaves memory allocated, replaced with read-write loop
-     *
-     * if(cmd == GET_CMD) {
+     */
+      if(cmd == GET_CMD) {
         int retry = 5;
 
         ssize_t v = 0;
@@ -504,9 +505,9 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {                   
             } else if (v == image->file_size)
                 break;
         }
-    }*/
+    }
 
-    if(cmd == GET_CMD) {
+    /*if(cmd == GET_CMD) {
         int retry = 5;
 
         ssize_t r = 0, w = 0;
@@ -545,7 +546,7 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {                   
 
         free(buf);
         return OK;
-    }
+    }*/
 
     return OK;
 
@@ -562,7 +563,7 @@ int send_bad_request(int conn_sd) {
     str_bad_request[strlen(bad_request)] = '\0';
     size_t len_bad = strlen(str_bad_request) + 1;
 
-    size_t len_header = build_message(len_bad, "text/html", &msg, NULL);
+    size_t len_header = build_message(len_bad, "text/html", &msg, NULL, str_bad_request);
     ssize_t s = 0;
     size_t sent = 0;
 
@@ -603,6 +604,66 @@ int send_bad_request(int conn_sd) {
         else if ((w != len_bad) && (retry == 0))
             return ERROR_SENDING_MESSAGE;
         else if(w == len_bad)
+            break;
+
+    }
+
+    free(msg);
+
+}
+
+int send_service_unavailable(int conn_sd) {
+
+    char *msg = NULL;
+    msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
+    msg[511] = '\0';
+
+    char *str_service_unavailable = memory_alloc(strlen(service_unavailable) + 1);
+    memcpy(str_service_unavailable, service_unavailable, strlen(service_unavailable));
+    str_service_unavailable[strlen(service_unavailable)] = '\0';
+    size_t len_ser = strlen(service_unavailable) + 1;
+
+    size_t len_header = build_message(len_ser, "text/html", &msg, NULL, str_service_unavailable);
+    ssize_t s = 0;
+    size_t sent = 0;
+
+    /************ Send headers **********************/
+    while (sent < len_header) {
+
+        s = send(conn_sd, msg + sent, strlen(msg), MSG_MORE);
+
+        if (s == -1) {
+            fprintf(stderr, "Error in send()\n");
+            return ERROR_SENDING_MESSAGE;
+        }
+
+        sent += s;
+    }
+    /********************************************/
+
+    int retry = 5;
+
+    ssize_t v, w = 0;
+
+    while (retry > 0) {
+
+        while (len_ser - w > 0) {
+            v = write_block(conn_sd, service_unavailable + w, len_ser - w);
+            if (v == -1 && errno != EAGAIN) {
+                fprintf(stderr, "Error sending image\n");
+                return ERROR_SENDING_MESSAGE;
+            }
+
+            w += v;
+        }
+
+        if ((w != len_ser) && (retry != 0)) {
+            retry--;
+            continue;
+        }
+        else if ((w != len_ser) && (retry == 0))
+            return ERROR_SENDING_MESSAGE;
+        else if(w == len_ser)
             break;
 
     }

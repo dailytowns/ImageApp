@@ -55,50 +55,54 @@ void retrieve_dim_from_DB(struct request_t *request, MYSQL *conn) {
 
         if (mysql_query(conn, tmp_query)) {
             fprintf(stderr, "%s\n", mysql_error(conn));
-            //   return(0);
         }
         release_mutex(&db_mtx);
         /****************************************************/
 
         res = mysql_use_result(conn);
 
-        if ((row = mysql_fetch_row(res)) != NULL) {
-
+        if ((row = mysql_fetch_row(res)) != NULL) {                                                                     /* If data has been retrieved */
+            request->colors = parse_int(row[7]);
             request->width = parse_int(row[3]);
             request->height = parse_int(row[2]);
             build_image_name_cache(&image_name_cache,
                                    request->image_name,
                                    request->image_list->q,
                                    request->width,
-                                   request->height);    //Name used for caching
+                                   request->height,
+                                   request->colors);                                                                    //Name used for caching
             request->cache_name = strdup(image_name_cache);
 
-            cache[(idx_cache++) % 256].query = strdup(tmp_query);                                                           /* Used simple FIFO queue */
+            cache[(idx_cache++) % 256].query = strdup(tmp_query);                                                       /* Used simple FIFO queue */
             cache[(idx_cache++) % 256].row = row;
             cache[(idx_cache++) % 256].state = VALUE_DB;
 
         } else {
+            request->colors = 0;
             request->width = 0;
             request->height = 0;
             build_image_name_cache(&image_name_cache,
                                    request->image_name,
                                    request->image_list->q,
                                    request->width,
-                                   request->height);    //Name used for caching
+                                   request->height,
+                                   request->colors);    //Name used for caching
             request->cache_name = strdup(image_name_cache);
             cache[(idx_cache++) % 256].query = strdup(tmp_query);
             cache[(idx_cache++) % 256].state = NO_VALUE_IN_DB;
         }
 
         /* Release memory used to store results and close connection */
-    } else if (row == (MYSQL_ROW) -1) {
+    } else if (row == (MYSQL_ROW) -1) {                                                                                 /* If row was assigned but there is no data in database */
+        request->colors = 0;
         request->width = 0;
         request->height = 0;
         build_image_name_cache(&image_name_cache,
                                request->image_name,
                                request->image_list->q,
                                request->width,
-                               request->height);                                                                        /* Build name used to store and retrieve image from cache */
+                               request->height,
+                               request->colors);                                                                        /* Build name used to store and retrieve image from cache */
         request->cache_name = strdup(image_name_cache);
     }
 
@@ -108,22 +112,11 @@ void retrieve_dim_from_DB(struct request_t *request, MYSQL *conn) {
 
 void set_number_of_connections() {
 
-    char *server = "localhost";
-    char *user = "root";
-    char *password = "portento123";
-    char *database = "devicedb";
-
-    MYSQL *conn = mysql_init(NULL);
-
-    /* Connect to database */
-    if (!mysql_real_connect(conn, server, user, password, database, 3306, NULL, 0)) {
-        fprintf(stderr, "%s\n", mysql_error(conn));
-        exit(EXIT_FAILURE);
-    }
+    MYSQL *conn = connect_DB();
 
     char *query = memory_alloc(512);
 
-    sprintf(query, "set global max_connections = %s;", convert_long_to_string(MAX_CONNECTION_DB));
+    sprintf(query, "set global max_connections = %s;", convert_int_to_string(num_thread_pool + 2));
 
     query[strlen(query)] = '\0';
 
@@ -132,7 +125,7 @@ void set_number_of_connections() {
         //   return(0);
     }
 
-    sprintf(query, "UPDATE mysql.user SET max_user_connections = %s WHERE user='root' AND host='localhost';", convert_long_to_string(NUM_THREAD_POOL));
+    sprintf(query, "UPDATE mysql.user SET max_user_connections = %d WHERE user='root' AND host='localhost';", num_thread_pool);
 
     query[strlen(query)] = '\0';
 

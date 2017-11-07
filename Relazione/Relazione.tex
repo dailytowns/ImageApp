@@ -3,9 +3,10 @@
 \usepackage[utf8x]{inputenc}
 \usepackage{newlfont}
 \usepackage{makeidx}
-\usepackage{hyperref}										%Visualizzazione di url
+\usepackage{hyperref}										%Url visualization
+\usepackage[edges]{forest}											%Filesystem tree
 
-\usepackage{fancyhdr}
+\usepackage{fancyhdr}										%Header customization
 \pagestyle{fancy}
 \lhead{Relazione al progetto}
 \rfoot{Pagina \thepage}
@@ -15,6 +16,29 @@
 \usepackage{tikz}
 \usetikzlibrary{trees}
 \usetikzlibrary{positioning}
+%%%%%%%%%%%% Tree folder %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\definecolor{foldercolor}{RGB}{124,166,198}
+
+\tikzset{pics/folder/.style={code={%
+			\node[inner sep=0pt, minimum size=#1](-foldericon){};
+			\node[folder style, inner sep=0pt, minimum width=0.3*#1, minimum height=0.6*#1, above right, xshift=0.05*#1] at (-foldericon.west){};
+			\node[folder style, inner sep=0pt, minimum size=#1] at (-foldericon.center){};}
+	},
+	pics/folder/.default={20pt},
+	folder style/.style={draw=foldercolor!80!black,top color=foldercolor!40,bottom color=foldercolor}
+}
+
+\forestset{is file/.style={edge path'/.expanded={%
+			([xshift=\forestregister{folder indent}]!u.parent anchor) |- (.child anchor)},
+		inner sep=1pt},
+	this folder size/.style={edge path'/.expanded={%
+			([xshift=\forestregister{folder indent}]!u.parent anchor) |- (.child anchor) pic[solid]{folder=#1}}, inner ysep=0.6*#1},
+	folder tree indent/.style={before computing xy={l=#1}},
+	folder icons/.style={folder, this folder size=#1, folder tree indent=3*#1},
+	folder icons/.default={12pt},
+}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
 	\begin{titlepage}
@@ -75,44 +99,49 @@
 			\item se l'applicazione è stata realizzata secondo l'architettura \textit{client-server} sarà una sola entità a fornire la risorsa richiesta, ovvero il server stesso
 			\item nel caso in cui l'applicazione sia stata progettata secondo l'architettura \textit{peer-to-peer}, la risorsa verrà fornita in generale da n entità che collaborano a tale scopo. L'elemento server centrale non viene necessariamente rimosso in quanto potrebbe risultare utile nella coordinazione fra i peer.
 		\end{itemize}
-		\begin{center}
-			\begin{tikzpicture}
-				%Styles for the nodes
-				[client/.style={circle, draw=blue=!80, fill=blue!30}]
-				
-				\node (server) at (0,0) [circle, draw=green!80, fill=green!30, thick] {Server};
-				\node[client] (client1) [above right = of server] {client};
-				\node[client] (client2) [above left = of server] {client};
-				\node[client] (client3) [below right = of server] {client};
-				\node[client] (client4) [below left = of server] {client};
-				
-				\draw [<->, very thick] (server.north east) -- (client1.south);
-				\draw [<->, very thick] (server.north west) -- (client2.south);
-				\draw [<->, very thick] (server.south east) -- (client3.north);
-				\draw [<->, very thick] (server.south west) -- (client4.north);
-			\end{tikzpicture}
-			\hspace{2cm}
-			\begin{tikzpicture}
-				%Styles for the nodes
-				[client/.style={circle, draw=blue=!80, fill=blue!30, thick}]
-				
-				\node (server) at (0,0) [circle, draw=green!80, fill=green!30, thick] {Server};
-				\node[client] (client1) [above right = of server] {peer};
-				\node[client] (client2) [above left = of server] {peer};
-				\node[client] (client3) [below right = of server] {peer};
-				\node[client] (client4) [below left = of server] {peer};
-				
-				\draw [<->, very thick] (server.north east) -- (client1.south);
-				\draw [<->, very thick] (server.north west) -- (client2.south);
-				\draw [<->, very thick] (server.south east) -- (client3.north);
-				\draw [<->, very thick] (server.south west) -- (client4.north);
-				\draw [<->, very thick] (client1.west) -- (client2.east);
-				\draw [<->, very thick] (client1.south) -- (client3.north);
-				\draw [<->, very thick] (client3.west) -- (client4.east);
-				\draw [<->, very thick] (client4.north) -- (client2.south);
-			\end{tikzpicture}
-		\end{center}
 		\vspace{5mm}
+		\begin{center}
+			\begin{figure}[ht!]
+				\begin{tikzpicture}
+					%Styles for the nodes
+					[client/.style={circle, draw=blue=!80, fill=blue!30}]
+					
+					\node (server) at (0,0) [circle, draw=green!80, fill=green!30, thick] {Server};
+					\node[client] (client1) [above right = of server] {client};
+					\node[client] (client2) [above left = of server] {client};
+					\node[client] (client3) [below right = of server] {client};
+					\node[client] (client4) [below left = of server] {client};
+					
+					\draw [<->, very thick] (server.north east) -- (client1.south);
+					\draw [<->, very thick] (server.north west) -- (client2.south);
+					\draw [<->, very thick] (server.south east) -- (client3.north);
+					\draw [<->, very thick] (server.south west) -- (client4.north);
+				\end{tikzpicture}
+				\hspace{2cm}
+				\begin{tikzpicture}
+					%Styles for the nodes
+					[client/.style={circle, draw=blue=!80, fill=blue!30, thick}]
+					
+					\node (server) at (0,0) [circle, draw=green!80, fill=green!30, thick] {Server};
+					\node[client] (client1) [above right = of server] {peer};
+					\node[client] (client2) [above left = of server] {peer};
+					\node[client] (client3) [below right = of server] {peer};
+					\node[client] (client4) [below left = of server] {peer};
+					
+					\draw [<->, very thick] (server.north east) -- (client1.south);
+					\draw [<->, very thick] (server.north west) -- (client2.south);
+					\draw [<->, very thick] (server.south east) -- (client3.north);
+					\draw [<->, very thick] (server.south west) -- (client4.north);
+					\draw [<->, very thick] (client1.west) -- (client2.east);
+					\draw [<->, very thick] (client1.south) -- (client3.north);
+					\draw [<->, very thick] (client3.west) -- (client4.east);
+					\draw [<->, very thick] (client4.north) -- (client2.south);
+				\end{tikzpicture}
+				\caption{Architetture client-server e peer-to-peer}
+			\end{figure}
+
+		\end{center}
+		\vspace{1cm}
 		\begin{flushleft}
 			Nel caso di questo progetto, ci si riferirà chiaramente all'architettura \textit{client-server}.\newline
 			
@@ -128,33 +157,44 @@
 			Fatta salva questa relazione, non è stata approfondita la parte di documentazione, di notevole importanza in un processo di sviluppo come lo \textit{Unified Process} o la sua versione proprietaria di \textit{Rational} RUP.	
 		\end{flushleft}
 		
-		\subsection{Contenuto del CD}
-			\begin{flushleft}
-				Di seguito viene riportato il contenuto del CD contenente sia i sorgenti del programma realizzato sia il sorgente di questa stessa relazione.
-			\end{flushleft}
-			\begin{tikzpicture}			
-				\tikzstyle{every node}=[draw=black, thick, anchor=west]
-				\tikzstyle{selected}=[draw=red,fill=red!30]
-				\tikzstyle{optional}=[dashed,fill=gray!50]
-				\node {ImageApp}
-				child { node {doc}}		
-				child { node {fonts}}
-				child { node {source}}
-				child { node [selected] {tex}
-					child { node {generic}}
-					child { node [optional] {latex}}
-					child { node {plain}}
-				}
-				child [missing] {}				
-				child [missing] {}				
-				child [missing] {}				
-				child { node {texdoc}};
-			\end{tikzpicture}
-			
 		\subsection{Installazione del programma}
+			\begin{flushleft}
+				Di seguito viene riportato il contenuto del CD contenente sia i sorgenti del programma realizzato sia il sorgente di questa stessa relazione. Il codice utilizzato per disegnare l'albero delle directory è stato reperito 
+				\href{https://tex.stackexchange.com/questions/5073/making-a-simple-directory-tree}{qui}.
+			\end{flushleft}
+			\begin{center}
+				\begin{figure}
+					\scalebox{0.8}{
+						\begin{forest}
+							for tree={font=\sffamily, %grow'=0,
+								folder indent=.9em, folder icons,
+								edge=densely dotted}
+							[CD
+							[ImageApp, this folder size=20pt]
+							[Relazione, this folder size=20pt]
+							[ImageMagick-master, this folder size=20pt]
+							[src, this folder size=20pt]
+							[test, this folder size=20pt]
+							[Unused code, this folder size=15pt]
+							[install.sh, is file]
+							[Presentazione.odp, is file]
+							[Relazione.pdf, is file]
+							]
+						\end{forest}
+					}
+				\caption{Contenuto del CD}
+				\end{figure}
+			\end{center}
 			\begin{flushleft}
 				La procedura di installazione è stata riportata esaurientemente anche nella presentazione \textit{Presentazione.odp} affinché il lettore potesse avere ugualmente un supporto grafico immediato nella fase di installazione anche se non interessato a questa relazione.\newline
 				
+				Come il lettore avrà modo di constatare durante la fase di installazione, vengono richiesti i privilegi di amministratore, il che costituirebbe una violazione ai requisiti imposti dalla traccia. Tuttavia i privilegi vengono sfruttati solo in questa procedura affinché il programma funzioni correttamente. In particolare vengono utilizzati per installare le librerie relative alla trasformazione delle immagini \textit{ImageMagick}, all'accesso al database \textit{MySQL}, oltre all'installazione di tutti quei programmi di contorno che si è assunto il lettore non avesse installati sulla propria macchina, un esempio su tutti il server \textit{mysql-server}.\newline
+				
+				Aprendo il terminale nella cartella principale, è possibile cominciare l'installazione eseguendo il comando \textit{sh ./install.sh}, dove la chiamata di \textit{sh} può essere evitata rendendo il file eseguibile tramite \textit{chmod +x ./install.sh}.
+				
+				L'installazione del server \textit{MySQL} viene effettuata durante la precedente procedura, così come la sua popolazione. \'{E} possibile scegliere tra l'importazione del file già esportato oppure, vista la natura didattica del progetto, eseguire il programma che è stato realizzato per effettuare gli inserimenti nel database a partire dal file \textit{wurfl.xml}. Per completezza, nella cartella \textit{Unused code} è presente una versione di questo file che utilizza la \textit{CLI} del DBMS \textit{Postgresql}, dal momento che in prima battuta era stato scelto proprio questo per effettuare l'accesso al database. Avendo riscontrato tuttavia delle problematiche nella sottoposizione delle query al database, ed in particolare nella sottoposizione di query dinamiche, si è optato per il DBMS \textit{MySQL} che non ha manifestato tali asperità.
+				
+				Si ricorda anche in questo documento che per il corretto funzionamento del server è necessario, in fase di installazione del server \textit{mysql-server}, scegliere la password suggerita, per semplicità impostata a \textit{0000}. Si è adottata questa scelta poiché non è possibile recuperare la password inserita a tempo di installazione, o almeno non in maniera agevole, ed anche la sua reimpostazione non risulterebbe di grande aiuto. 
 				
 			\end{flushleft}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Traccia del progetto %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -172,7 +212,7 @@
 			\item \textit{ImageMagick} (in particolare, il programma \textit{convert}), disponibile all’URL \url{http://www.imagemagick.org/};
 			\item la libreria \textit{Independent JPEG Group} (in particolare, i programmi \textit{djpeg} e \textit{cjpeg}), disponibile all’URL \url{http://www.ijg.org/}.
 		\end{itemize}
-		Il server dovrà essere eseguito nello spazio utente ed essere in ascolto su una porta di default (configurabile); potrà essere testato tramite un browser reale o tra mite un tool a riga di comando quale \textit{cURL}, disponibile all’URL \url{http://curl.haxx.se/}.
+		Il server dovrà essere eseguito nello spazio utente ed essere in ascolto su una porta di default (configurabile); potrà essere testato tramite un browser reale o tramite un tool a riga di comando quale \textit{cURL}, disponibile all’URL \url{http://curl.haxx.se/}.
 		Si richiede di valutare le prestazioni del Web server realizzato (non includendo le funzionalità  di adattamento dei contenuti) in termini di tempo di risposta e throughput e confrontarle con quelle di \textit{Apache 2.x} usando un semplice workload di tipo statico. La valutazione delle prestazioni può essere effettuata utilizzando il tool di benchmarking \textit{httperf} (disponibile all’URL \url{http://www.hpl.hp.com/personal/David\_Mosberger/httperf.html}).
 	\end{flushleft}
 	
@@ -233,7 +273,7 @@
 		http://www.texample.net/tikz/examples/filesystem-tree/
 	\end{flushleft}
 	
-	\section{Strutture principali utilizzate dal programma}
+	\section{Strutture principali}
 		\subsection{\textit{struct Server}}
 	\begin{flushleft}
 		La \textit{struct Request} si occupa di raccogliere le informazioni relative alla richiesta del client. I suoi campi sono:
@@ -255,9 +295,15 @@
 
 		-l'estensione determina univocamente il file richiesto, il formato richiesto viene recuperato dall'header content type
 	\end{flushleft}
-	
+	\section{Punti di estensione}
+	\begin{flushleft}
+		Uno dei punti del programma che potrebbe essere approfondito è il dimensionamento del pool in base al carico di richieste in arrivo al sistema. Per come è stato realizzato il sistema, oltre allo sviluppo dell'algoritmo che si occupa della gestione delle dimensioni del pool, uno dei problemi di cui si dovrebbe tener conto è la gestione del numero di connessioni alla base di dati.\newline
+		
+		Altro punto che potrebbe essere approfondito è lo sviluppo di un algoritmo che scelta in maniera maggiormente oculata la dimensione del pool di thread dinamicamente a tempo di esecuzione.
+	\end{flushleft}	
 	\section{Annotazioni}
 	\begin{flushleft}
+		-non e stato mantenuto l'array di fd perche se la connessione dura 5 secondi, e improbabile che il client richieda due volte la stessa immagine
 		-ifndef E' risultato utile per includere l'header Basic in più sorgenti, fatto che altrimenti avrebbe generato errori a tempo di compilazione dato che si stava tentando di ridefinire delle struct.\newline
 		-import del database effettuata con strumenti esterni: anche se non prestante non viene effettuato a runtime
 		-Nè Facebook nè google supportano keep-alive
@@ -298,7 +344,10 @@
 		printf("max mem %ld %ld \n", rlim.rlim_cur, rlim.rlim_max);
 		*/
 	\end{flushleft}
-
+	\section{Test}
+	\begin{flushleft}
+		
+	\end{flushleft}
 	
 \end{document}
 \grid

@@ -15,7 +15,7 @@ CURLLIBS = `curl-config --libs`
 
 #all: $(PROGS)
 
-httpserver: HttpServer.c #HandleImage.c Utils.c Strings.c HandleDB.c ThreadPool.c HandleImage.c Message.c Utils.c Log.c
+httpserver: HttpServer.c HandleImage.c Utils.c Strings.c HandleDB.c ThreadPool.c HandleImage.c Utils.c Log.c Request.c
 	$(CC) $(CFLAGS) $? $(LIBS) -o $@
 
 treexml: ParseWurfl.c Utils.c

@@ -16,7 +16,6 @@ struct pool_t *allocate_pool(int num_threads) {
 
     int i = 0;
     pthread_t tid = 0;
-    long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
 
     /* Initializes every struct thread_data that are to be in the pool */
     while (i < num_threads) {
@@ -103,7 +102,9 @@ int get_E(struct pool_t *pool) {
             nE = (pool->E + i) % num_thread_pool;
             if (pool->array_fd[nE].fd == -1) {
                 pool->E = (nE + 1) % num_thread_pool;                                                                   /* Start from next index the second time */
-                signal_cond(&(pool->cb_not_empty));
+                if(pool->E == 0)
+                    pool->E += 1;
+                //signal_cond(&(pool->cb_not_empty));
                 return nE;
             }
             i++;

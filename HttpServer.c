@@ -15,8 +15,8 @@
 #include <sys/mman.h>
 
 #include <sched.h>
-#include <sys/time.h>
 #include <time.h>
+#include <assert.h>                                                                                                     /* man example */
 
 #include "include/HttpServer.h"
 #include "include/Utils.h"
@@ -138,7 +138,7 @@ int main() {
 
 }
 
-int set_thread_affinity(int core_id) {
+int set_thread_affinity(int core_id) {                                                                                  /* man example */
 
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -154,8 +154,8 @@ void *handle_client(void *arg) {
     struct request_t *request = create_request();
     struct image_t *image_info = memory_alloc(sizeof(struct image_t));
 
-    //long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-    //set_thread_affinity(td->E % (int)num_cores);
+    long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+    set_thread_affinity(td->E % (int)num_cores);
 
     int status_r, ret, v, timer;
 
@@ -167,7 +167,7 @@ void *handle_client(void *arg) {
 
         td->msg_received = 1;
         max_descriptor++;
-        signal_cond(&pool->cb_not_empty);
+        //signal_cond(&pool->cb_not_empty);
 
         int idx = td->idx;
         td->idx = (td->idx + 1) % 5;
@@ -362,7 +362,7 @@ void init_pollfd(struct pollfd *array_fd) {
 
     int i = 0;
 
-    while (i < NUM_THREAD_POOL) {
+    while (i < num_thread_pool) {
         array_fd[i].fd = -1;
         array_fd[i].events = POLLIN;
         i++;

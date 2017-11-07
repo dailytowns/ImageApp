@@ -14,8 +14,9 @@
 #include <errno.h>
 #include <sys/mman.h>
 
-
 #include <sched.h>
+#include <sys/time.h>
+#include <time.h>
 
 #include "include/HttpServer.h"
 #include "include/Utils.h"
@@ -48,7 +49,7 @@ int main() {
 
     struct server_t *server = init_server();                                                                                             /* Initialize the main components of the server */
     pool = server->pool;
-    struct thread_data *td = pool->arr;
+    //struct thread_data *td = pool->arr;
     struct pollfd *arrfd = pool->array_fd;                                                                              /* Avoids double reference*/
 
     while (1) {
@@ -58,9 +59,9 @@ int main() {
         if (ready ==
             -1) {                                                                                                       /* If an error occurs in poll() */
             fprintf(stderr, "Error in poll()\n");
-            if (errno == EBADF || errno == ENOMEM) {
+            if (errno == ENOMEM) {
                 fprintf(stderr, "in select, errno %d\n", errno);
-                exit(EXIT_FAILURE);
+                exit(EXIT_FAILURE);                                                                                     /* If poll() fails, the program cannot execute correctly*/
             }
         } else if (ready == 0) {
             continue;
@@ -74,11 +75,11 @@ int main() {
                max_descriptor) {                                                                                        /* Iterate over d ready descriptors */
 
             if (arrfd[i].fd !=
-                -1) {                                                                                    /* If the descriptor has been set */
+                -1) {                                                                                                   /* If the descriptor has been set */
                 if (arrfd[i].revents &
-                    POLLIN) {                                                                        /* If this is the descriptor that is ready to receive bytes */
+                    POLLIN) {                                                                                           /* If this is the descriptor that is ready to receive bytes */
                     if (arrfd[i].fd ==
-                        server->listen_sock) {                                                           /* If the descriptor ready to receive is the listen socket, it has to be created a new connection */
+                        server->listen_sock) {                                                                          /* If the descriptor ready to receive is the listen socket, it has to be created a new connection */
 
                         socklen = sizeof(client_addr);
 
@@ -92,15 +93,16 @@ int main() {
                         /**************** Searching for a free slot *************************************/
                         get_mutex(&(pool->mtx));
 
-                        nE = get_E(
-                                pool);                                                                                  /* Finds a free slot in the ring buffer */
+                            nE = get_E(
+                                    pool);                                                                                  /* Finds a free slot in the ring buffer */
 
-                        pool->arr[nE].conn_sd = conn_sd;
-                        pool->arr[nE].E = nE;
-                        pool->arr[nE].client_addr = client_addr;
-                        pool->arr[nE].timer = 5;
-                        pool->arr[nE].request = 10;
-                        //pool->arr[nE].idx_pool = idx_pool;
+                            /***** Save informations associated with thread ******/
+                            pool->arr[nE].conn_sd = conn_sd;
+                            pool->arr[nE].E = nE;
+                            pool->arr[nE].client_addr = client_addr;
+                            pool->arr[nE].timer = 5;
+                            pool->arr[nE].request = 10;
+                            //pool->arr[nE].idx_pool = idx_pool;
 
                         release_mutex(&(pool->mtx));
                         /******************************************************************************/
@@ -111,7 +113,7 @@ int main() {
 
                     } else {
                         get_mutex(&(pool->mtx));
-                        nE = find_E_for_fd(pool, array_fd[i].fd);
+                        nE = find_E_for_fd(pool, arrfd[i].fd);
                         release_mutex(&(pool->mtx));
 
                         if (nE != -1) {
@@ -152,8 +154,8 @@ void *handle_client(void *arg) {
     struct request_t *request = create_request();
     struct image_t *image_info = memory_alloc(sizeof(struct image_t));
 
-    long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-    set_thread_affinity(td->E % (int)num_cores);
+    //long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+    //set_thread_affinity(td->E % (int)num_cores);
 
     int status_r, ret, v, timer;
 
@@ -212,8 +214,6 @@ void *handle_client(void *arg) {
 
                     ret = get_image_to_send(image_info);
 
-                    printf("%d\n", td->E);
-
                     if (ret == IMAGE_NOT_PRESENT) {
                         send_bad_request(td->conn_sd);
                         get_mutex(&(td->mtx_new_request));
@@ -222,7 +222,7 @@ void *handle_client(void *arg) {
 
                             write_event_log(log_fp, LOG_IMAGE_NOT_PRESENT,
                                             td->client_addr,
-                                            NULL);                                                                          /* Keeps track of the client's connection in the log file */
+                                            NULL);                                                                      /* Keeps track of the client's connection in the log file */
 
                             free(request->ext);
                             free(request);
@@ -233,7 +233,7 @@ void *handle_client(void *arg) {
                     } else {
                         v = send_image(td->conn_sd, image_info, request->cmd);
                         if (v == CONNECTION_CLOSED) {
-                            get_mutex(&(td->mtx_new_request));
+                            get_mutex(&(td->mtx_new_request));                                                          /* Avoids that a new client has its fd erased just after its creation */
                                 td->msg_received = 0;
                                 max_descriptor--;
                                 pool->array_fd[td->E].fd = -1;

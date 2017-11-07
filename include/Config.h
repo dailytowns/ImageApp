@@ -25,6 +25,14 @@ int serv_port;
 #define IMAGE_LIST "../res/imagelist"
 #define IMAGE_CACHE_FILE "../res/list_cache"
 #define ICON_PATH "../images/favicon.ico"
+
+//#define SERV_CONF "./res/serv.conf"
+//#define SERVER_LOG_PATH "./log/"
+//#define IMAGE_DIR "./images/"
+//#define IMAGE_CACHE "./cache/"
+//#define IMAGE_LIST "./res/imagelist"
+//#define IMAGE_CACHE_FILE "./res/list_cache"
+//#define ICON_PATH "./images/favicon.ico"
 #define ICON_NAME "favicon.ico"
 
 /**********************************************************************************************************************/

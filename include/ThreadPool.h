@@ -23,7 +23,7 @@ struct thread_data {
     pthread_t tid;
     pthread_mutex_t mtx_msg_socket;
     pthread_mutex_t mtx_new_request;
-    pthread_cond_t cond_no_msg;
+    //pthread_cond_t cond_no_msg;
     int idx;
     int msg_received;
     int E;

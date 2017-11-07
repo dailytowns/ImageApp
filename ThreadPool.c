@@ -36,7 +36,7 @@ struct pool_t *allocate_pool(int num_threads) {
 
         init_mutex(&((pool_thread[i]).mtx_msg_socket));
         init_mutex(&((pool_thread[i]).mtx_new_request));
-        init_cond(&((pool_thread[i]).cond_no_msg));
+//        init_cond(&((pool_thread[i]).cond_no_msg));
 
         abort_with_error("pthread_create()",
                          pthread_create(&((pool_thread[i]).tid),

@@ -11,14 +11,13 @@
 
 #include "Config.h"
 
-struct pollfd array_fd[256];
+//struct pollfd array_fd[256];
 
 struct server_t {
     struct sockaddr_in serv_addr;
     int listen_sock;
     struct pool_t *pool;
-    struct pollfd array_fd[NUM_THREAD_POOL];
-    FILE *log_fp;
+    //struct pollfd array_fd[NUM_THREAD_POOL];
 };
 
 void child_job(int idx_pool);

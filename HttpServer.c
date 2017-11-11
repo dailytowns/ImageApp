@@ -47,7 +47,7 @@ int main() {
     socklen_t socklen;
     struct sockaddr_in client_addr;                                                                                     /* Address of the client */
 
-    struct server_t *server = init_server();                                                                                             /* Initialize the main components of the server */
+    struct server_t *server = init_server();                                                                            /* Initialize the main components of the server */
     pool = server->pool;
     //struct thread_data *td = pool->arr;
     struct pollfd *arrfd = pool->array_fd;                                                                              /* Avoids double reference*/
@@ -146,6 +146,84 @@ int set_thread_affinity(int core_id) {                                          
 
     pthread_t current_thread = pthread_self();
     return pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+}
+
+void *check_job(void *arg) {
+
+    struct pollfd *pfd;
+    struct thread_data *td;
+
+    int i;
+
+    while (1) {
+
+        i = 0;
+
+        if (pthread_mutex_lock(&(pool->mtx_pool)) != 0) {
+            fprintf(stderr, "Error in pthread_mutex_trylock()\n");
+            exit(EXIT_FAILURE);
+        }
+        wait_cond(&(pool->cond_pool), &(pool->mtx_pool));
+
+        if ((max_descriptor >= num_thread_pool / 2) &&
+            (num_thread_pool < 256)) {
+
+            pfd = realloc(pool->array_fd, (num_thread_pool + num_thread_pool) * sizeof(struct pollfd));
+            abort_with_error("realloc()", pfd == NULL);
+
+            td = realloc(pool->arr, (num_thread_pool + num_thread_pool) * (sizeof(struct thread_data)));
+            abort_with_error("realloc()", td == NULL);
+
+            while (i < num_thread_pool) {
+
+                pthread_t tid = 0;
+
+                pool->array_fd[(num_thread_pool) + i].fd = -1;
+                pool->array_fd[num_thread_pool + i].events = POLLIN;
+
+                (pool->arr[num_thread_pool + i]).message = (char **) memory_alloc(
+                        5 *
+                        sizeof(char *));                                                                                    /* Allocated five slots for messages */
+                int msg = 0;
+                while (msg < 5) {
+                    (pool->arr[num_thread_pool + i]).message[msg] = memory_alloc(
+                            HTTP_MESSAGE_SIZE);                                            /* Slots of 512 bytes */
+                    msg++;
+                }
+                (pool->arr[num_thread_pool + i]).tid = tid;
+
+                printf("i db %d\n", i);
+
+                (pool->arr[num_thread_pool +
+                           i]).connDB = connect_DB();                                                                         /* Every thread gets its connection to the db */
+
+                init_mutex(&((pool->arr[num_thread_pool + i]).mtx_msg_socket));
+                init_mutex(&((pool->arr[num_thread_pool + i]).mtx_new_request));
+                init_cond(&((pool->arr[num_thread_pool + i]).cond_msg));
+
+                abort_with_error("pthread_create()",
+                                 pthread_create(&((pool->arr[num_thread_pool + i]).tid),
+                                                NULL,
+                                                handle_client,
+                                                (pool->arr + (num_thread_pool + i))) != 0);
+                i++;
+            }
+
+            num_thread_pool += num_thread_pool;
+
+            pool->array_fd = pfd;
+            pool->arr = td;
+
+            signal_cond(&pool->cond_pool_doubled);
+
+        } else {
+            usleep(50000);
+        }
+
+        release_mutex(&(pool->mtx_pool));
+
+    }
+
 }
 
 void *handle_client(void *arg) {
@@ -262,6 +340,7 @@ void *handle_client(void *arg) {
                 pool->array_fd[td->E].fd = td->conn_sd;
                 release_mutex(&(td->mtx_new_request));
                 /********************************************************************************************/
+                break;
 
             case EMPTY_MESSAGE:
                 get_mutex(&(td->mtx_new_request));

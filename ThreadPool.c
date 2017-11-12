@@ -14,7 +14,7 @@ struct pool_t *allocate_pool(int num_threads) {
 
     struct thread_data *pool_thread = (struct thread_data *) memory_alloc(num_threads * sizeof(struct thread_data));
 
-    int i = 0;
+    int i = 1;
     pthread_t tid = 0;
 
     /* Initializes every struct thread_data that are to be in the pool */

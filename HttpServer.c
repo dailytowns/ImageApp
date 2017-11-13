@@ -32,7 +32,9 @@ char *file_map;
 size_t seek_cache;
 struct pool_t *pool;
 nfds_t max_descriptor;
+struct pollfd arrfd[MAX_FD];
 //int idx_pool;
+struct client_t arrclient[MAX_FD];
 
 int main() {
 
@@ -50,7 +52,7 @@ int main() {
     struct server_t *server = init_server();                                                                            /* Initialize the main components of the server */
     pool = server->pool;
     //struct thread_data *td = pool->arr;
-    struct pollfd *arrfd = pool->array_fd;                                                                              /* Avoids double reference*/
+    //arrfd = pool->array_fd;                                                                                           /* Avoids double reference*/
 
     while (1) {
 
@@ -71,8 +73,7 @@ int main() {
         d = 0;
         i = 0;
 
-        while (d <
-               max_descriptor) {                                                                                        /* Iterate over d ready descriptors */
+        while ((d < max_descriptor) && (i < num_thread_pool)) {                                                                                        /* Iterate over d ready descriptors */
 
             if (arrfd[i].fd !=
                 -1) {                                                                                                   /* If the descriptor has been set */
@@ -102,7 +103,12 @@ int main() {
                             pool->arr[nE].client_addr = client_addr;
                             pool->arr[nE].timer = 5;
                             pool->arr[nE].request = 10;
+
+                            arrclient[nE].conn_sd = conn_sd;
+                            arrclient[nE].port = ntohs(client_addr.sin_port);
                             //pool->arr[nE].idx_pool = idx_pool;
+
+                        printf("%d connsd %d port %d\n", conn_sd, ntohs(client_addr.sin_port), nE);
 
                         release_mutex(&(pool->mtx));
                         /******************************************************************************/
@@ -112,13 +118,16 @@ int main() {
                                         NULL);                                                                          /* Keeps track of the client's connection in the log file */
 
                     } else {
+
                         get_mutex(&(pool->mtx));
-                        nE = find_E_for_fd(pool, arrfd[i].fd);
+                        nE = find_E_for_fd(arrfd[i].fd);
                         release_mutex(&(pool->mtx));
+
+                        printf("in else, found nE = %d\n", nE);
 
                         if (nE != -1) {
                             get_mutex(&(pool->arr[nE].mtx_new_request));
-                            pool->arr[nE].msg_received = 1;                                                         /* Used for the timer */
+                                pool->arr[nE].msg_received = 1;                                                         /* Used for the timer */
                             release_mutex(&(pool->arr[nE].mtx_new_request));
                         }
                     }
@@ -245,7 +254,7 @@ void *handle_client(void *arg) {
 
         td->msg_received = 1;
         max_descriptor++;
-        //signal_cond(&pool->cb_not_empty);
+        pool->array_fd[td->E].fd = td->conn_sd;
 
         int idx = td->idx;
         td->idx = (td->idx + 1) % 5;
@@ -296,6 +305,8 @@ void *handle_client(void *arg) {
                         send_bad_request(td->conn_sd);
                         get_mutex(&(td->mtx_new_request));
                             pool->array_fd[td->E].fd = -1;
+                            arrclient[td->E].conn_sd = -1;
+                            arrclient[td->E].port = -1;
                             max_descriptor--;
 
                             write_event_log(log_fp, LOG_IMAGE_NOT_PRESENT,
@@ -315,6 +326,8 @@ void *handle_client(void *arg) {
                                 td->msg_received = 0;
                                 max_descriptor--;
                                 pool->array_fd[td->E].fd = -1;
+                                arrclient[td->E].conn_sd = -1;
+                                arrclient[td->E].port = -1;
                                 shutdown(td->conn_sd, SHUT_RDWR);
                                 close(td->conn_sd);
 
@@ -337,7 +350,6 @@ void *handle_client(void *arg) {
                 /*********** Updates the array of descriptors to received more data ***************************/
                 get_mutex(&(td->mtx_new_request));
                 td->msg_received = 0;
-                pool->array_fd[td->E].fd = td->conn_sd;
                 release_mutex(&(td->mtx_new_request));
                 /********************************************************************************************/
                 break;
@@ -347,6 +359,8 @@ void *handle_client(void *arg) {
                     td->msg_received = 0;
                     max_descriptor--;
                     pool->array_fd[td->E].fd = -1;
+                    arrclient[td->E].conn_sd = -1;
+                    arrclient[td->E].port = -1;
 
                     write_event_log(log_fp, CONNECTION_CLOSED,
                                 td->client_addr,
@@ -370,6 +384,8 @@ void *handle_client(void *arg) {
 
                 max_descriptor--;
                 pool->array_fd[td->E].fd = -1;
+                arrclient[td->E].conn_sd = -1;
+                arrclient[td->E].port = -1;
                 shutdown(td->conn_sd, SHUT_RDWR);
                 close(td->conn_sd);
                 td->msg_received = 0;
@@ -579,6 +595,11 @@ struct server_t *init_server() {
     icon.image_name = ICON_PATH;
     icon.file_size = get_file_size(icon.fd);
     /*****************************************************/
+
+    init_pollfd(
+            arrfd);                                                                                 /* Initialization of the pool of fds that are going to be checked in poll()*/
+    arrfd[0].fd = serverPtr->listen_sock;
+    arrfd[0].events = POLLIN;
 
     return serverPtr;
 }

@@ -39,7 +39,7 @@ int serv_port;
 
 #define IMAGE_NAME_PREALLOCATION 64
 #define USERAGENT_PREALLOCATION 128
-#define SIZE_FILE_LISTCACHE 65536                                                                                       /* Maximum amount of memory lockable */
+#define SIZE_FILE_LISTCACHE 16384                                                                                       /* Maximum amount of memory lockable */
 
 enum parameters_conf {CONF_NUMBER_THREAD, CONF_MAX_CONN, CONF_PORT_SERV, CONF_BACKLOG};
 

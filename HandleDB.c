@@ -116,7 +116,7 @@ void set_number_of_connections() {
 
     char *query = memory_alloc(512);
 
-    sprintf(query, "set global max_connections = %s;", convert_int_to_string(num_thread_pool + 2));
+    sprintf(query, "set global max_connections = %s;", convert_int_to_string(258));
 
     query[strlen(query)] = '\0';
 
@@ -125,7 +125,7 @@ void set_number_of_connections() {
         //   return(0);
     }
 
-    sprintf(query, "UPDATE mysql.user SET max_user_connections = %d WHERE user='root' AND host='localhost';", num_thread_pool);
+    sprintf(query, "UPDATE mysql.user SET max_user_connections = %d WHERE user='root' AND host='localhost';", 256);
 
     query[strlen(query)] = '\0';
 

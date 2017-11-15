@@ -32,9 +32,8 @@ char *file_map;
 size_t seek_cache;
 struct pool_t *pool;
 nfds_t max_descriptor;
-struct pollfd arrfd[MAX_FD];
-//int idx_pool;
-struct client_t arrclient[MAX_FD];
+struct pollfd *arrfd;
+//struct client_t arrclient[64];
 
 int main() {
 
@@ -48,9 +47,11 @@ int main() {
 
     socklen_t socklen;
     struct sockaddr_in client_addr;                                                                                     /* Address of the client */
+    size_t size_pool = 4;
 
     struct server_t *server = init_server();                                                                            /* Initialize the main components of the server */
-    pool = server->pool;
+    int idx_pool = 0, idx, idx_arrfd;
+    //pool = server->pool;
     //struct thread_data *td = pool->arr;
     //arrfd = pool->array_fd;                                                                                           /* Avoids double reference*/
 
@@ -92,47 +93,72 @@ int main() {
                         set_socket_options(conn_sd, SO_KEEPALIVE, 0);
 
                         /**************** Searching for a free slot *************************************/
-                        get_mutex(&(pool->mtx));
+                        get_mutex(&(pool[idx_pool].mtx));
 
                             nE = get_E(
-                                    pool);                                                                                  /* Finds a free slot in the ring buffer */
+                                    &pool[idx_pool]);                                                                                  /* Finds a free slot in the ring buffer */
+                            idx_arrfd = get_free_slot_arrfd(arrfd);
 
                             /***** Save informations associated with thread ******/
-                            pool->arr[nE].conn_sd = conn_sd;
-                            pool->arr[nE].E = nE;
-                            pool->arr[nE].client_addr = client_addr;
-                            pool->arr[nE].timer = 5;
-                            pool->arr[nE].request = 10;
+                            pool[idx_pool].arr[nE].conn_sd = conn_sd;
+                            pool[idx_pool].arr[nE].E = nE;
+                            pool[idx_pool].arr[nE].idx_arrfd = idx_arrfd;
+                            pool[idx_pool].arr[nE].client_addr = client_addr;
+                            pool[idx_pool].arr[nE].timer = 5;
+                            pool[idx_pool].arr[nE].request = 10;
+                            pool[idx_pool].arr[nE].idx_pool = idx_pool;
+                            pool[idx_pool].arr[nE].msg_received = 1;
+                            pool[idx_pool].arr[nE].used = 1;
 
-                            arrclient[nE].conn_sd = conn_sd;
-                            arrclient[nE].port = ntohs(client_addr.sin_port);
+                            //arrclient[nE].conn_sd = conn_sd;
+                            //arrclient[nE].port = ntohs(client_addr.sin_port);
                             //pool->arr[nE].idx_pool = idx_pool;
 
-                        printf("%d connsd %d port %d\n", conn_sd, ntohs(client_addr.sin_port), nE);
+                        printf("connsd %d port %d nE %d idx_pool %d\n", conn_sd, ntohs(client_addr.sin_port), nE, idx_pool);
 
-                        release_mutex(&(pool->mtx));
+                        release_mutex(&(pool[idx_pool].mtx));
                         /******************************************************************************/
 
                         write_event_log(log_fp, CONNECTION_ACCEPTED,
                                         client_addr,
                                         NULL);                                                                          /* Keeps track of the client's connection in the log file */
 
+                        idx = idx_pool;
+                        idx_pool = (idx_pool + 1) % 4;
+
                     } else {
 
-                        get_mutex(&(pool->mtx));
-                        nE = find_E_for_fd(arrfd[i].fd);
-                        release_mutex(&(pool->mtx));
+                        int t = 0, ret = -1;
 
-                        printf("in else, found nE = %d\n", nE);
+                        while(t < 4) {
+                            get_mutex(&(pool[t].mtx));
+                            ret = find_E_for_fd(pool+t, arrfd[i].fd);
+                            release_mutex(&(pool[t].mtx));
 
-                        if (nE != -1) {
-                            get_mutex(&(pool->arr[nE].mtx_new_request));
-                                pool->arr[nE].msg_received = 1;                                                         /* Used for the timer */
-                            release_mutex(&(pool->arr[nE].mtx_new_request));
+                            if(ret != -1)
+                                break;
+
+                            t++;
                         }
+
+                        printf("in else, found nE = %d\n", ret);
+
+                        if (ret != -1) {
+                            get_mutex(&(pool[t].arr[ret].mtx_new_request));
+                                pool[t].arr[ret].msg_received = 1;                                                         /* Used for the timer */
+                            release_mutex(&(pool[t].arr[ret].mtx_new_request));
+                        }
+
+                        arrfd[i].fd = -1;
+                        nE = ret;
+                        idx = t;
                     }
 
-                    signal_cond(&(pool->arr[nE].cond_msg));
+                    //get_mutex(&(pool[idx_pool].arr[nE].mtx_new_request));
+                    //wait_cond(&(pool[idx_pool].arr[nE].cond_timer), &(pool[idx_pool].arr[nE].mtx_new_request));
+                    signal_cond(&(pool[idx].arr[nE].cond_msg));
+                    //release_mutex(&(pool[idx_pool].arr[nE].mtx_new_request));
+
                     d++;
                     continue;
 
@@ -141,6 +167,10 @@ int main() {
             }
             i++;
 
+        }
+
+        if (max_descriptor > (num_thread_pool-1)*size_pool) {
+            //signal_cond();
         }
 
     }
@@ -157,7 +187,7 @@ int set_thread_affinity(int core_id) {                                          
     return pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
 }
 
-void *check_job(void *arg) {
+/*void *check_job(void *arg) {
 
     struct pollfd *pfd;
     struct thread_data *td;
@@ -193,11 +223,11 @@ void *check_job(void *arg) {
                 (pool->arr[num_thread_pool + i]).message = (char **) memory_alloc(
                         5 *
                         sizeof(char *));                                                                                    /* Allocated five slots for messages */
-                int msg = 0;
+  /*              int msg = 0;
                 while (msg < 5) {
                     (pool->arr[num_thread_pool + i]).message[msg] = memory_alloc(
                             HTTP_MESSAGE_SIZE);                                            /* Slots of 512 bytes */
-                    msg++;
+    /*                msg++;
                 }
                 (pool->arr[num_thread_pool + i]).tid = tid;
 
@@ -206,7 +236,7 @@ void *check_job(void *arg) {
                 (pool->arr[num_thread_pool +
                            i]).connDB = connect_DB();                                                                         /* Every thread gets its connection to the db */
 
-                init_mutex(&((pool->arr[num_thread_pool + i]).mtx_msg_socket));
+      /*          init_mutex(&((pool->arr[num_thread_pool + i]).mtx_msg_socket));
                 init_mutex(&((pool->arr[num_thread_pool + i]).mtx_new_request));
                 init_cond(&((pool->arr[num_thread_pool + i]).cond_msg));
 
@@ -233,7 +263,7 @@ void *check_job(void *arg) {
 
     }
 
-}
+}*/
 
 void *handle_client(void *arg) {
 
@@ -249,17 +279,21 @@ void *handle_client(void *arg) {
     while (1) {
 
         get_mutex(&(td->mtx_new_request));
-        wait_cond(&td->cond_msg,
-                  &td->mtx_new_request);                                                                                /* A message has been received */
 
-        td->msg_received = 1;
+        if(td->msg_received != 1)
+            wait_cond(&td->cond_msg,
+                      &td->mtx_new_request);                                                                                /* A message has been received */
+
+        printf("dopo wait\n");
+
         max_descriptor++;
-        pool->array_fd[td->E].fd = td->conn_sd;
 
         int idx = td->idx;
         td->idx = (td->idx + 1) % 5;
 
         status_r = receive_request(td, idx);
+
+        arrfd[td->idx_arrfd].fd = td->conn_sd;
 
         if(td->request == 0) {
             send_service_unavailable(td->conn_sd);
@@ -304,9 +338,9 @@ void *handle_client(void *arg) {
                     if (ret == IMAGE_NOT_PRESENT) {
                         send_bad_request(td->conn_sd);
                         get_mutex(&(td->mtx_new_request));
-                            pool->array_fd[td->E].fd = -1;
-                            arrclient[td->E].conn_sd = -1;
-                            arrclient[td->E].port = -1;
+                            arrfd[td->idx_arrfd].fd = -1;
+                            //arrclient[td->E].conn_sd = -1;
+                            //arrclient[td->E].port = -1;
                             max_descriptor--;
 
                             write_event_log(log_fp, LOG_IMAGE_NOT_PRESENT,
@@ -325,15 +359,15 @@ void *handle_client(void *arg) {
                             get_mutex(&(td->mtx_new_request));                                                          /* Avoids that a new client has its fd erased just after its creation */
                                 td->msg_received = 0;
                                 max_descriptor--;
-                                pool->array_fd[td->E].fd = -1;
-                                arrclient[td->E].conn_sd = -1;
-                                arrclient[td->E].port = -1;
+                                arrfd[td->idx_arrfd].fd = -1;
+                                //arrclient[td->E].conn_sd = -1;
+                                //arrclient[td->E].port = -1;
                                 shutdown(td->conn_sd, SHUT_RDWR);
                                 close(td->conn_sd);
 
-                            get_mutex(&(pool->mtx));
-                                signal_cond(&pool->cb_not_full);
-                            release_mutex(&(pool->mtx));
+                            get_mutex(&(pool[td->idx_pool].mtx));
+                                signal_cond(&pool[td->idx_pool].cb_not_full);
+                            release_mutex(&(pool[td->idx_pool].mtx));
 
                             release_mutex(&(td->mtx_new_request));
                         }
@@ -358,9 +392,12 @@ void *handle_client(void *arg) {
                 get_mutex(&(td->mtx_new_request));
                     td->msg_received = 0;
                     max_descriptor--;
-                    pool->array_fd[td->E].fd = -1;
-                    arrclient[td->E].conn_sd = -1;
-                    arrclient[td->E].port = -1;
+                    arrfd[td->idx_arrfd].fd = -1;
+                    td->used = -1;
+                    //arrclient[td->E].conn_sd = -1;
+                    //arrclient[td->E].port = -1;
+
+                printf("in empty message\n");
 
                     write_event_log(log_fp, CONNECTION_CLOSED,
                                 td->client_addr,
@@ -370,7 +407,7 @@ void *handle_client(void *arg) {
                     if(close(td->conn_sd) == -1){
                         fprintf(stderr, "Error in close(), errno %d\n strerror %s\n", errno, strerror(errno));
                     };
-                signal_cond(&(pool->cb_not_full));
+                signal_cond(&(pool[td->idx_pool].cb_not_full));
                 release_mutex(&(td->mtx_new_request));
                 continue;
 
@@ -383,17 +420,20 @@ void *handle_client(void *arg) {
             get_mutex(&(td->mtx_new_request));
 
                 max_descriptor--;
-                pool->array_fd[td->E].fd = -1;
-                arrclient[td->E].conn_sd = -1;
-                arrclient[td->E].port = -1;
+                arrfd[td->idx_arrfd].fd = -1;
                 shutdown(td->conn_sd, SHUT_RDWR);
                 close(td->conn_sd);
                 td->msg_received = 0;
-                signal_cond(&pool->cb_not_full);
+                td->timer = 5;
+                td->request = 10;
+                td->used = -1;
+
+                signal_cond(&pool[td->idx_pool].cb_not_full);
+
+            printf("in finish timer, td->E %d td->idx_pool %d\n", td->E, td->idx_pool);
 
             release_mutex(&(td->mtx_new_request));
         } else {
-            signal_cond(&td->cond_msg);
             continue;
         }
     }
@@ -562,6 +602,8 @@ struct server_t *init_server() {
     read_config_file();
 
     serverPtr->listen_sock = create_socket();
+    set_socket_options(serverPtr->listen_sock, 0,
+                       SO_REUSEADDR);
     set_server_address(serverPtr);
     bind_address(serverPtr->listen_sock, serverPtr->serv_addr);
     image_list();
@@ -571,19 +613,24 @@ struct server_t *init_server() {
         exit(EXIT_FAILURE);
     }
 
-    set_socket_options(serverPtr->listen_sock, 0,
-                       SO_REUSEADDR);                                                                                   /* It prevents error on bind() for subsequent run of the program */
+                                                                                     /* It prevents error on bind() for subsequent run of the program */
     log_fp = get_log();
 
     set_number_of_connections();                                                                                        /* Allows one connection per thread */
 
-    serverPtr->pool = allocate_pool(
-            num_thread_pool);                                                                                           /* Preallocation of NUM_THREAD_POOL threads */
+    pool = memory_alloc(4 * sizeof(struct pool_t));
 
-    init_pollfd(
-            serverPtr->pool->array_fd);                                                                                 /* Initialization of the pool of fds that are going to be checked in poll()*/
-    serverPtr->pool->array_fd[0].fd = serverPtr->listen_sock;
-    serverPtr->pool->array_fd[0].events = POLLIN;
+    int i = 0;
+    while(i < 4) {
+        allocate_pool(
+                num_thread_pool, pool + i);                                                                                           /* Preallocation of NUM_THREAD_POOL threads */
+        i++;
+    }
+
+    //init_pollfd(
+    //       serverPtr->pool->array_fd);                                                                                 /* Initialization of the pool of fds that are going to be checked in poll()*/
+    //serverPtr->pool->array_fd[0].fd = serverPtr->listen_sock;
+    //serverPtr->pool->array_fd[0].events = POLLIN;
 
     log_fp = get_log();
 
@@ -596,6 +643,7 @@ struct server_t *init_server() {
     icon.file_size = get_file_size(icon.fd);
     /*****************************************************/
 
+    arrfd = memory_alloc(32 * sizeof(struct pollfd));
     init_pollfd(
             arrfd);                                                                                 /* Initialization of the pool of fds that are going to be checked in poll()*/
     arrfd[0].fd = serverPtr->listen_sock;

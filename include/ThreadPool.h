@@ -34,6 +34,9 @@ struct thread_data {
     int request;
     /*@{*/
     int idx_pool;
+    pthread_cond_t cond_timer;
+    int idx_arrfd;
+    int used;
 };
 
 /**
@@ -66,6 +69,7 @@ int handle_timer(struct thread_data *td);
  * @return The index of the free slot
  */
 int get_E(struct pool_t *pool);
+int get_free_slot_arrfd(struct pollfd *pool);
 
 /**
  * Function: allocate_pool
@@ -75,7 +79,7 @@ int get_E(struct pool_t *pool);
  * @param num_threads Number of threads preallocated
  * @return A pointer to the array of threads preallocated
  */
-struct pool_t *allocate_pool(int num_threads);
+void allocate_pool(int num_threads, struct pool_t *pool);
 
 /**
  * Function: init_mutex

@@ -10,7 +10,9 @@
 #include "include/HttpServer.h"
 #include "include/HandleDB.h"
 
-struct pool_t *allocate_pool(int num_threads) {
+extern struct pollfd *arrfd;
+
+void allocate_pool(int num_threads, struct pool_t *pool) {
 
     struct thread_data *pool_thread = (struct thread_data *) memory_alloc(num_threads * sizeof(struct thread_data));
 
@@ -32,10 +34,13 @@ struct pool_t *allocate_pool(int num_threads) {
         printf("i db %d\n", i);
 
         (pool_thread[i]).connDB = connect_DB();                                                                         /* Every thread gets its connection to the db */
+        (pool_thread[i]).used = -1;                                                                         /* Every thread gets its connection to the db */
+
 
         init_mutex(&((pool_thread[i]).mtx_msg_socket));
         init_mutex(&((pool_thread[i]).mtx_new_request));
-//        init_cond(&((pool_thread[i]).cond_no_msg));
+        init_cond(&((pool_thread[i]).cond_msg));
+        init_cond(&((pool_thread[i]).cond_timer));
 
         abort_with_error("pthread_create()",
                          pthread_create(&((pool_thread[i]).tid),
@@ -47,7 +52,6 @@ struct pool_t *allocate_pool(int num_threads) {
     }
 
     /* The poll is allocated and the pool of threads is assigned to the relative field*/
-    struct pool_t *pool = memory_alloc(sizeof(struct pool_t));
     pool->arr = pool_thread;
     pool->E = 1;
     pool->S = 1;
@@ -69,10 +73,6 @@ struct pool_t *allocate_pool(int num_threads) {
     }
     /************************************************************************************************************/
 
-    pool->array_fd = (struct pollfd *)memory_alloc(num_thread_pool * sizeof(struct pollfd));
-
-
-    return pool;
 }
 
 int find_E_for_fd(struct pool_t *pool, int fd) {
@@ -81,7 +81,7 @@ int find_E_for_fd(struct pool_t *pool, int fd) {
 
     while (i < num_thread_pool) {
 
-        if (pool->array_fd[i].fd == fd)
+        if (arrfd[i].fd == fd)
             return i;
         i++;
     }
@@ -91,6 +91,21 @@ int find_E_for_fd(struct pool_t *pool, int fd) {
 
 }
 
+int get_free_slot_arrfd(struct pollfd *arrfd) {
+
+    int i = 0;
+
+    while (i < num_thread_pool) {
+
+        if (arrfd[i].fd == -1)
+            return i;
+        i++;
+    }
+
+    if (i == num_thread_pool)
+        return -1;
+
+}
 
 int get_E(struct pool_t *pool) {
 
@@ -100,7 +115,7 @@ int get_E(struct pool_t *pool) {
     while (1) {
         while (i < num_thread_pool) {
             nE = (pool->E + i) % num_thread_pool;
-            if (pool->array_fd[nE].fd == -1) {
+            if (pool->arr[nE].used == -1) {
                 pool->E = (nE + 1) % num_thread_pool;                                                                   /* Start from next index the second time */
                 if(pool->E == 0)
                     pool->E += 1;
@@ -111,17 +126,16 @@ int get_E(struct pool_t *pool) {
         }
 
         if (i == num_thread_pool) {
-            //get_mutex(&pool->mtx);
+            get_mutex(&pool->mtx);
             wait_cond(&(pool->cb_not_full), &(pool->mtx));
             i = 0;
-            //release_mutex(&(pool->mtx));
+            release_mutex(&(pool->mtx));
         }
     }
 
 }
 
 int handle_timer(struct thread_data *td) {
-
 
     while (1) {
 
@@ -133,6 +147,7 @@ int handle_timer(struct thread_data *td) {
             if ((td->msg_received) == 1) {
                 td->timer = td->timer - 1;
                 release_mutex(&(td->mtx_new_request));
+                printf("return timer %d\n", td->timer);
                 return td->timer;
             }
             release_mutex(&(td->mtx_new_request));

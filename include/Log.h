@@ -1,7 +1,3 @@
-//
-// Created by federico on 13/10/17.
-//
-
 #ifndef IMAGEAPP_LOG_H
 #define IMAGEAPP_LOG_H
 
@@ -10,6 +6,9 @@
 
 #include "HandleImage.h"
 
+/**
+ * Enumeration that is used to choose the action to be tracked in the log
+ */
 enum event_type {CONNECTION_ACCEPTED, LOG_IMAGE_REQUESTED, LOG_EMPTY_MESSAGE, LOG_MAX_NUM_REQUESTS, LOG_IMAGE_NOT_PRESENT};
 
 /**

@@ -1,7 +1,3 @@
-//
-// Created by federico on 31/10/17.
-//
-
 #ifndef IMAGEAPP_HTTPRESPONSE_H
 #define IMAGEAPP_HTTPRESPONSE_H
 

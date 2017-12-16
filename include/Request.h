@@ -1,7 +1,3 @@
-//
-// Created by federico on 31/10/17.
-//
-
 #ifndef IMAGEAPP_REQUEST_H
 #define IMAGEAPP_REQUEST_H
 
@@ -9,6 +5,10 @@
 #include "ThreadPool.h"
 #include "Strings.h"
 
+/**
+ * Enumeration of the possible states returned during handling the request, from the
+ * the reception to the sending of the response
+ */
 enum rqst_stat {OK, IMAGE_REQUESTED, MESSAGE_NOT_CORRECT, REQUEST_TOO_LONG,
     EMPTY_PATH, EMPTY_MESSAGE, IMAGE_NOT_PRESENT, ICON_REQUESTED, REQUEST_RECEIVED,
     HEAD_CMD, GET_CMD, ERROR_SENDING_MESSAGE, CONNECTION_CLOSED};
@@ -26,18 +26,27 @@ struct request_t {
     ImageNode *image_list;                                                                                              /**< List of mime-types accepted */
     char *cache_name;                                                                                                   /**< Name of the image used to store it in cache */
     char *ext;                                                                                                          /**< Extension of the image requested */
-    int colors;                                                                                                      /** Number of colors supported */
+    int colors;                                                                                                         /**< Number of colors supported */
     /*@{*/
 };
 
 /**
  * Function: create_request
  *
- * Initializes a struct Request
+ * Allocates a struct Request
  *
  * @return A pointer to the struct
  */
 struct request_t *create_request();
+
+/**
+ * Function: destroy_request
+ *
+ * It frees the memory used by the struct Request
+ *
+ * @return A pointer to the struct
+ */
+void destroy_request(struct request_t *request, int status_r);
 
 /**
  * Function: receive_message

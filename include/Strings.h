@@ -1,9 +1,7 @@
-//
-// Created by federico on 14/10/17.
-//
-
 #ifndef IMAGEAPP_STRINGS_H
 #define IMAGEAPP_STRINGS_H
+
+#include <sys/types.h>
 
 /**
  * Function: build_image_name_cache
@@ -61,5 +59,15 @@ char *catenate_strings(char *s1, char *s2);
  * @param s2 Second string
  * @return An array of char containing the catenation
  */
-size_t build_message(off_t file_size, char *ext, char **msg, struct image_t *image, char *msg_error);
+size_t build_message(off_t file_size, char *ext, char msg[], struct image_t *image, char *msg_error);
+
+/**
+ * Function: convert_float_to_string
+ *
+ * This function converts a float to a string
+ *
+ * @param n Value to be converted
+ * @return An array of char containing the conversion
+ */
+char *convert_float_to_string(float n);
 #endif //IMAGEAPP_STRINGS_H

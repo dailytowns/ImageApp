@@ -1,22 +1,35 @@
-//
-// Created by federico on 31/10/17.
-//
-
 #ifndef IMAGEAPP_HANDLEIMAGE_H
 #define IMAGEAPP_HANDLEIMAGE_H
 
 #include <fcntl.h>
 
+pthread_mutex_t fd_cache_mtx;
+
+/**
+ * Enumeration of the extensions handled by the server
+ */
 enum ext_image {JPG, JXR, PNG, WEBP, ALL_EXT};
 
 /**
  * A struct that gather informations about mime-types
  */
 struct image_node_t {
-    char *type;
-    float q;
-    int extension;
+    /*@{*/
+    char *type;                                                                                                         /**< MIME type */
+    float q;                                                                                                            /**< Quality of the image requested */
+    int extension;                                                                                                      /**< Integer identifying MIME type requested */
+    /*@{*/
 };
+
+struct fd_cache {
+    int fd[128];
+    off_t file_size[128];
+    pthread_mutex_t fd_cache_mtx[128];
+    pthread_cond_t fd_cache_cond[128];
+    int E;
+};
+
+struct fd_cache fd_image_cache;
 
 typedef struct image_node_t ImageNode;
 
@@ -41,6 +54,9 @@ struct image_t {
     /*@{*/
 };
 
+void destroy_image(struct image_t *image);
+
+
 /**
  * Function: create_mime_list
  *
@@ -57,7 +73,8 @@ ImageNode *create_mime_list(int preallocation);
  * It returns the image in cache or transform the image stored in images folder
  *
  * @param image Image to be sent
+ * @param idx_fd_cache Index in the file descriptor cache
  * @return A pointer to the list
  */
-int get_image_to_send(struct image_t *image);
+int get_image_to_send(struct image_t *image, int idx_fd_cache);
 #endif //IMAGEAPP_HANDLEIMAGE_H

@@ -1,7 +1,3 @@
-//
-// Created by federico on 31/10/17.
-//
-
 #include <errno.h>
 #include <string.h>
 #include <sys/sendfile.h>
@@ -10,14 +6,14 @@
 #include "include/Request.h"
 #include "include/Utils.h"
 
-struct request_t *create_request() {
+void destroy_request(struct request_t *request, int status_r) {
 
-    struct request_t *request = memory_alloc(sizeof(struct request_t));
-    request->user_agent = memory_alloc(USERAGENT_PREALLOCATION * sizeof(char));
-    request->image_name = memory_alloc(IMAGE_NAME_PREALLOCATION * sizeof(char));
-    request->image_list = create_mime_list(4);
-
-    return request;
+    free(request->user_agent);
+    free(request->image_list);
+    if(status_r != MESSAGE_NOT_CORRECT)
+        free(request->image_name);
+    free(request->cache_name);
+    free(request);
 
 }
 
@@ -41,7 +37,7 @@ int receive_request(struct thread_data *td, int idx) {
             if ((error == EINTR) || (error == EAGAIN)) {
                 retry--;
                 continue;
-            } else if((error == ECONNRESET) || (errno == EBADF)) {
+            } else if ((error == ECONNRESET) || (errno == EBADF)) {
                 return EMPTY_MESSAGE;
             } else {
                 fprintf(stderr, "recv() in receive_message(), errno = %d", error);
@@ -66,10 +62,10 @@ int receive_request(struct thread_data *td, int idx) {
 
         if (v <= 0) {
 
-            if (v == 0) {                                                                                               /*Keep connection up*/
+            if (v == 0) {
                 return EMPTY_MESSAGE;
             } else {
-                perror("recv");
+                fprintf(stderr, "Error in recv(), error = %s\n", strerror(error));
             }
 
         }
@@ -79,11 +75,13 @@ int receive_request(struct thread_data *td, int idx) {
 
 int get_command_line(const char *message, char **firstline) {
 
-    int i = 0;
+    size_t i = 0;
     size_t size = 128;
 
-    char *tmp_firstline = NULL;
-    tmp_firstline = (char *) memory_alloc(size * sizeof(char));
+    /*char *tmp_firstline = NULL;
+    tmp_firstline = memory_alloc(size * sizeof(char));*/
+
+    char tmp_firstline[512];
 
     while (1) {
         if (message[i] != '\r') {
@@ -94,27 +92,27 @@ int get_command_line(const char *message, char **firstline) {
         }
         i++;
 
-        if(i == size) {                                                                                                 /* Reallocation in case of a name too long */
-            if(size == (size + size))
+        /*if (i ==
+            size) {                                                                                                 /* Reallocation in case of a name too long */
+            /*if (size == (size + size))
                 return REQUEST_TOO_LONG;
             size += size;
             char *p = realloc(tmp_firstline, size + size);
             abort_with_error("realloc()", p == NULL);
             tmp_firstline = p;
-        }
+        }*/
     }
 
-    *firstline = (char *) memory_alloc(strlen(tmp_firstline) + 1);                                                      /* Reallocation to reduce amount of memory used */
+    *firstline = memory_alloc(i+1);                                                                              /* Reallocation to reduce amount of memory used */
+
     if (*firstline != NULL)
-        memcpy(*firstline, tmp_firstline, strlen(tmp_firstline));
+        memcpy(*firstline, tmp_firstline, i);
     else {
         fprintf(stderr, "Error in realloc()\n");
         exit(EXIT_FAILURE);
     }
 
-    *((*firstline) + strlen(tmp_firstline)) = '\0';
-
-    free(tmp_firstline);
+    *((*firstline) + i) = '\0';
 
     return OK;
 }
@@ -122,9 +120,10 @@ int get_command_line(const char *message, char **firstline) {
 int parse_name(char *line, char **image_name, char **ext) {
 
     size_t i = 0, j = 0;
-    size_t size = strlen(line), image_preallocation = IMAGE_NAME_PREALLOCATION;
-    char *p = (char *)memory_alloc(IMAGE_NAME_PREALLOCATION), *tmp;
-    char *e = (char *)memory_alloc(5 * sizeof(char));
+    size_t size = strlen(line);
+    size_t image_preallocation = IMAGE_NAME_PREALLOCATION;
+    char *p = memory_alloc(IMAGE_NAME_PREALLOCATION), *tmp;
+    char *e = memory_alloc(5);
 
     while (i < size) {
 
@@ -137,7 +136,7 @@ int parse_name(char *line, char **image_name, char **ext) {
                     p[j] = line[i];
                     j++;
 
-                    if(j == IMAGE_NAME_PREALLOCATION) {
+                    if (j == IMAGE_NAME_PREALLOCATION) {
                         tmp = realloc(p, IMAGE_NAME_PREALLOCATION + IMAGE_NAME_PREALLOCATION);
                         abort_with_error("realloc()\n", p == NULL);
                         p = tmp;
@@ -146,7 +145,7 @@ int parse_name(char *line, char **image_name, char **ext) {
 
                 }
                 //*((*image_name) + j) = '\0';
-                if(line[i] == ' ')
+                if (line[i] == ' ')
                     return MESSAGE_NOT_CORRECT;
 
                 p[j] = '\0';
@@ -161,11 +160,12 @@ int parse_name(char *line, char **image_name, char **ext) {
 
                 break;
 
-            } else if(line[i + 1] == ' ') {
+            } else if (line[i + 1] == ' ') {
                 return EMPTY_PATH;
             } else {
 
-                if (strstr(line, "favicon") != NULL) return ICON_REQUESTED;                                             /* If ? not present, try to check if the icon is requested*/
+                if (strstr(line, "favicon") != NULL)
+                    return ICON_REQUESTED;                                             /* If ? not present, try to check if the icon is requested*/
 
                 else return MESSAGE_NOT_CORRECT;                                                                        /* If ? not present and the icon is not requested, the message is not correct*/
 
@@ -175,11 +175,12 @@ int parse_name(char *line, char **image_name, char **ext) {
         i++;
     }
 
-    *image_name = (char *) memory_alloc(strlen(p) + 1);                                                                 /* Reallocation to reduce amount of memory used */
+    *image_name = memory_alloc(strlen(p) +
+                                        1);                                                                 /* Reallocation to reduce amount of memory used */
     memcpy(*image_name, p, strlen(p));
     *((*image_name) + strlen(p)) = '\0';
 
-    *ext = (char *) memory_alloc(strlen(e) + 1);
+    *ext = memory_alloc(strlen(e) + 1);
     memcpy(*ext, e, strlen(e));
     *((*ext) + strlen(e)) = '\0';
 
@@ -194,78 +195,57 @@ int parse_name(char *line, char **image_name, char **ext) {
 
 int get_accept_line(char *message, char **accept_line) {
 
-    int i = 0;
-    char *tmp = strstr(message, "Accept: ");
-    size_t preallocation = 128;
+    size_t i = 0, preallocation = 128;
+    char tmp[preallocation];
+    memcpy(tmp, strstr(message, "Accept: "), preallocation);
+    tmp[preallocation - 1] = '\0';
 
-    if (tmp == NULL) {
-        fprintf(stderr, "Error in strstr(), Accept not present\n");
-        return MESSAGE_NOT_CORRECT;
-    }
-
-    char *tmp_acceptline = (char *) memory_alloc(256 * sizeof(char)), *p;
+    char tmp_acceptline[preallocation];
 
     /* i+8 jumps Accept: characters */
-    while (tmp[i + 8] != '\r') {
+    while (i < (preallocation - 8)) {
+
+        if(tmp[i + 8] == '\r') {
+            tmp_acceptline[i] = '\0';
+            break;
+        }
+
         tmp_acceptline[i] = tmp[i + 8];
         i++;
 
-        if(i == preallocation) {
-            p = realloc(tmp_acceptline, preallocation+preallocation);
-            abort_with_error("realloc()\n", p == NULL);
-            tmp_acceptline = p;
-            preallocation += preallocation;
-        }
     }
-    tmp_acceptline[i] = '\0';
 
-    *accept_line = memory_alloc(sizeof(char) * (strlen(tmp_acceptline) + 1));
-    memcpy(*accept_line, tmp_acceptline, strlen(tmp_acceptline));
-    *((*accept_line) + strlen(tmp_acceptline)) = '\0';
-
-    //printf("*acceptline %s\n", *accept_line);
-
-    free(tmp_acceptline);
+    *accept_line = memory_alloc(i+1);
+    memcpy(*accept_line, tmp_acceptline, i);
+    *((*accept_line) + i) = '\0';
 
     return OK;
 }
 
 int get_user_agent(char *message, char **user_agent) {
 
-    int i = 0;
+    size_t i = 0;
     size_t preallocation = USERAGENT_PREALLOCATION;
 
-    char *tmp = NULL, *tmp_user_agent = NULL;
+    char tmp[256];
+    memcpy(tmp, strstr(message, "User-Agent: "), preallocation);
+    tmp[255] = '\0';
 
-    tmp = strstr(message, "User-Agent: ");
-    if (!tmp) {
-        tmp = strstr(message, "user-agent:");
-    }
+    char tmp_user_agent[256];
 
-    tmp_user_agent = (char *)memory_alloc(USERAGENT_PREALLOCATION);
-
-    /*i+8 jumps Accept: characters. It is always present User-agent line,
+    /*i+8 jumps Accept: characters. It is always present User-Agent line,
      * that prevents segmentation fault*/
     while (tmp[i + 12] != '\r') {
 
-        tmp_user_agent[i] = tmp[i+12];
+        tmp_user_agent[i] = tmp[i + 12];
         i++;
-
-        if (i == USERAGENT_PREALLOCATION) {
-            char *p = realloc(tmp_user_agent, preallocation+preallocation);
-            abort_with_error("realloc()\n", p == NULL);
-            tmp_user_agent = p;
-            preallocation += preallocation;
-        }
 
     }
     tmp_user_agent[i] = '\0';
 
-    *user_agent = memory_alloc(sizeof(char) * (strlen(tmp_user_agent) + 1));
-    memcpy(*user_agent, tmp_user_agent, strlen(tmp_user_agent));
-    *((*user_agent) + strlen(tmp_user_agent)) = '\0';
-
-    free(tmp_user_agent);
+    *user_agent = memory_alloc(i+1);
+    memcpy(*user_agent, tmp_user_agent, i);
+    *((*user_agent) + i) = '\0';
 
     return OK;
 
@@ -277,7 +257,7 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
     unsigned int dim = 0;
 
     ImageNode *buf_im_list = NULL, *p;
-    buf_im_list = (ImageNode *)memory_alloc(preallocation * sizeof(ImageNode));
+    buf_im_list = memory_alloc(preallocation * sizeof(ImageNode));
 
     char *token1 = NULL;                                                                                                /* Token to split the string by commas */
     char *token2 = NULL;                                                                                                /* Token to split the string by semicolon */
@@ -298,22 +278,21 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
         }
 
         buf_im_list[dim].type = strdup(token1);
-        int idx = 0;
-        while(idx < dim) {
-            //printf("bufimlist[dim] %s\n", buf_im_list[idx].type);
-            idx++;
-        }
 
-        token1 = strtok(NULL, sep);                                                                                     /* Now NULL is used to work with the same string as stated in the man page */
+        token1 = strtok(NULL,
+                        sep);                                                                                     /* Now NULL is used to work with the same string as stated in the man page */
 
         i++;
         dim++;
 
         if (dim == preallocation) {
+
             p = (ImageNode *) realloc(buf_im_list, preallocation + preallocation);
             abort_with_error("realloc()", p == NULL);
             buf_im_list = p;
+
         }
+
     }
 
     token1 = NULL;
@@ -328,7 +307,9 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
         token2 = strtok(NULL, sep2);
 
         if (token1 != NULL) {
+
             if (strstr(token1, "image/") != NULL && token2 == NULL) {
+
                 if (strcmp(token1, "image/*") == 0) {
                     buf_im_list[i].extension = ALL_EXT;
                     buf_im_list[i].q = 1.0;
@@ -336,75 +317,72 @@ void get_list_accept_image(char *accept_line, ImageNode **image_list) {
                     i++;
                     continue;
                 }
-                if(strstr(token1, "jpg") != NULL)
+
+                if (strstr(token1, "jpg") != NULL)
                     buf_im_list[i].extension = JPG;
-                else if(strstr(token1, "jpeg") != NULL)
+                else if (strstr(token1, "jpeg") != NULL)
                     buf_im_list[i].extension = JPG;
-                else if(strstr(token1, "png") != NULL)
+                else if (strstr(token1, "png") != NULL)
                     buf_im_list[i].extension = PNG;
-                else if(strstr(token1, "webp") != NULL)
+                else if (strstr(token1, "webp") != NULL)
                     buf_im_list[i].extension = WEBP;
-                else if(strstr(token1, "jxr") != NULL)
+                else if (strstr(token1, "jxr") != NULL)
                     buf_im_list[i].extension = JXR;
                 buf_im_list[i].q = 1.0;
-                //printf("quality %f\n", buf_im_list[i].q);
+
                 i++;
                 continue;
+
             } else if (strstr(token1, "*/*") != NULL) {
+
                 if (token2 != NULL) {
+
                     errno = 0;
                     buf_im_list[i].q = strtof(token2 + 3, &s);
-                    if(!buf_im_list[i].q)
+                    if (!buf_im_list[i].q)
                         buf_im_list[i].q = 0.8;
+
                 }
+
                 buf_im_list[i].extension = ALL_EXT;
                 i++;
                 continue;
             }
         }
-//        else if (token2 == NULL) {
-//            i++;
-//            continue;
-//        }
 
-        errno = 0;
-        buf_im_list[i].q = strtof(token2 + 3, &s);
-        if (errno != 0) {
-            fprintf(stderr, "Error in strtof\n");
-            buf_im_list[i].q = 0.8;
+        if(token2 != NULL) {
+            errno = 0;
+            buf_im_list[i].q = strtof(token2 + 3, &s);
+            if (errno != 0) {
+                fprintf(stderr, "Error in strtof\n");
+                buf_im_list[i].q = 0.8;
+            }
         }
-        if(strstr(token1, "jpg") != NULL)
+
+        if (strstr(token1, "jpg") != NULL)
             buf_im_list[i].extension = JPG;
-        if(strstr(token1, "jpeg") != NULL)
+        if (strstr(token1, "jpeg") != NULL)
             buf_im_list[i].extension = JPG;
-        if(strstr(token1, "png") != NULL)
+        if (strstr(token1, "png") != NULL)
             buf_im_list[i].extension = PNG;
 
         i++;
 
     }
 
-    p = (ImageNode *)realloc(buf_im_list, dim * sizeof(ImageNode));
-    int j = 0;
-    while(j < dim) {
-        p[j].type = buf_im_list[j].type;
-        p[j].q = buf_im_list[j].q;
-        j++;
-    }
+    *image_list = (ImageNode *) realloc(buf_im_list, dim * sizeof(ImageNode));
+    abort_with_error("realloc()", *image_list == NULL);
 
-    *image_list = p;
+    free(token1);                                                                                                       /* Always free memory */
 
-    free(token1);
-
-    //order_list(image_list);
 }
 
 void parse_command(char *first_line, int *cmd) {
 
     int i = 0;
 
-    while(i < strlen(first_line)) {
-        if(strncmp(first_line + i, "GET", 3) == 0) {
+    while (i < strlen(first_line)) {
+        if (strncmp(first_line + i, "GET", 3) == 0) {
             *cmd = GET_CMD;
             return;
         } else if (strncmp(first_line + i, "HEAD", 4) == 0) {
@@ -419,11 +397,10 @@ void parse_command(char *first_line, int *cmd) {
 
 int parse_request(char *message, struct request_t **request) {
 
-    *request = create_request();
+    *request = memory_alloc(sizeof(struct request_t));                                                                  /* Allocated the request */
     int ret;
 
     char *first_line = NULL;
-    struct image_node_t *list = NULL;
 
     ret = get_command_line(message, &first_line);
     if (ret == OK) {
@@ -431,11 +408,13 @@ int parse_request(char *message, struct request_t **request) {
         parse_command(first_line, &((*request)->cmd));
 
         ret = parse_name(first_line, &((*request)->image_name), &((*request)->ext));
+
         if (ret == ICON_REQUESTED || ret == EMPTY_PATH) {
             (*request)->image_name = ICON_NAME;
             free(first_line);
             return ICON_REQUESTED;
         } else if (ret == MESSAGE_NOT_CORRECT) {
+            (*request)->image_name = "";
             free(first_line);
             return MESSAGE_NOT_CORRECT;
         }
@@ -444,38 +423,72 @@ int parse_request(char *message, struct request_t **request) {
 
         char *accept_line = NULL;
         ret = get_accept_line(message, &accept_line);
-        if(ret == MESSAGE_NOT_CORRECT)
+        if (ret == MESSAGE_NOT_CORRECT)
             return MESSAGE_NOT_CORRECT;
 
         char *user_agent = NULL;
         ret = get_user_agent(message, &user_agent);
         (*request)->user_agent = user_agent;
 
-        if(ret == OK) {
+        if (ret == OK) {
 
             get_list_accept_image(accept_line, &((*request)->image_list));
 
         }
+
+        free(accept_line);
 
     }
 
     return REQUEST_RECEIVED;
 }
 
-int send_image(int conn_sd, struct image_t *image, int cmd) {                                                           //aggiungo indice per scegliere slot da sbloccare
+ssize_t send_file_fd(int conn_sd, int fd, off_t size) {
 
-    char *msg = NULL;
-    msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
-    msg[511] = '\0';
+    ssize_t v;
+    off_t offset = 0;
+    size_t len = 0;
 
-    size_t len_header = build_message(image->file_size, image->ext, &msg, image, NULL);
+    while (len < size) {
+
+        errno = 0;
+        v = sendfile(conn_sd, fd, &offset, size - len);
+        //v = read_block(fd, buf, 4096);
+        //v = write_block(conn_sd, buf, 4096);
+
+        if (v == -1) {
+
+            if(errno == EPIPE) {
+                return CONNECTION_CLOSED;
+            }
+
+            fprintf(stderr, "len=%ld conn_sd=%d\n", len, conn_sd);
+            return ERROR_SENDING_MESSAGE;
+
+        }
+
+        len += v;
+        offset += v;
+
+    }
+
+    return len;
+
+}
+
+int send_image(int conn_sd, struct image_t *image,
+               int cmd) {
+
+    char msg[512];
+
+    size_t len_header = build_message(image->file_size, image->ext, msg, image, NULL);
     ssize_t s = 0;
     size_t sent = 0;
 
     /************ Send headers **********************/
     while (sent < len_header) {
 
-        s = send(conn_sd, msg + sent, strlen(msg), MSG_MORE);
+        s = send(conn_sd, msg + sent, strlen(msg), 0);
 
         if (s == -1) {
             fprintf(stderr, "Error in send()\n");
@@ -488,184 +501,161 @@ int send_image(int conn_sd, struct image_t *image, int cmd) {                   
 
     /* sendfile() leaves memory allocated, replaced with read-write loop
      */
-      if(cmd == GET_CMD) {
+    if (cmd == GET_CMD) {
         int retry = 5;
 
         ssize_t v = 0;
 
         while (retry > 0) {
-            v = sendfile(conn_sd, image->fd, NULL, (size_t) image->file_size);
-            if (v == -1) {
-                fprintf(stderr, "Error in sendfile()\n");
+            v = send_file_fd(conn_sd, image->fd, (size_t) image->file_size);
+            if (v == ERROR_SENDING_MESSAGE) {
+
+                fprintf(stderr, "Error in sendfile(), error %s\n", strerror(errno));
                 return ERROR_SENDING_MESSAGE;
+
+            } else if (v == CONNECTION_CLOSED) {
+                return CONNECTION_CLOSED;
             } else if (v != image->file_size) {
-                fprintf(stderr, "Image sent not correctly\n");
+
+                fprintf(stderr, "Image sent not correctly, size %ld retrying\n", image->file_size);
                 retry--;
                 continue;
+
+
             } else if (v == image->file_size)
                 break;
-        }
-    }
 
-    /*if(cmd == GET_CMD) {
-        int retry = 5;
-
-        ssize_t r = 0, w = 0;
-        size_t len = 0;
-        char *buf = memory_alloc(1024);
-
-        while (retry > 0) {
-            while (1) {
-                r = read_block(image->fd, buf, 1024);
-                if(r == 0)
-                    break;
-                w = write_block(conn_sd, buf, 1024);
-                if (w == -1) {
-                    fprintf(stderr, "Error sending image\n");
-                    return ERROR_SENDING_MESSAGE;
-                } else if (w == CONNECTION_CLOSED)
-                    return CONNECTION_CLOSED;
-
-                len += w;
-
-                if (len == image->file_size) {
-                    fprintf(stderr, "Image sent not correctly\n");
-                    free(buf);
-                    break;
-                }
-            }
-
-            if (len != image->file_size && retry != 0) {
-                retry--;
-                continue;
-            }
-            else if(len != image->file_size && retry == 0) {
-                return ERROR_SENDING_MESSAGE;
+            if (retry == 0) {
+                fprintf(stderr, "Image sent not correctly\n");
             }
         }
 
-        free(buf);
         return OK;
-    }*/
 
-    return OK;
-
+    }
 }
 
 int send_bad_request(int conn_sd) {
 
-    char *msg = NULL;
-    msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
-    msg[511] = '\0';
+        //char *msg = NULL;
+        //msg = memory_alloc((size_t) 512 * sizeof(char));
+        //msg[511] = '\0';
 
-    char *str_bad_request = memory_alloc(strlen(bad_request) + 1);
-    memcpy(str_bad_request, bad_request, strlen(bad_request));
-    str_bad_request[strlen(bad_request)] = '\0';
-    size_t len_bad = strlen(str_bad_request) + 1;
+        char msg[512];
 
-    size_t len_header = build_message(len_bad, "text/html", &msg, NULL, str_bad_request);
-    ssize_t s = 0;
-    size_t sent = 0;
+        //char *str_bad_request = memory_alloc(strlen(bad_request) + 1);
+        //memcpy(str_bad_request, bad_request, strlen(bad_request));
+        //str_bad_request[strlen(bad_request)] = '\0';
+        //size_t len_bad = strlen(str_bad_request) + 1;
+        size_t len_bad = strlen(bad_request) + 1;
 
-    /************ Send headers **********************/
-    while (sent < len_header) {
 
-        s = send(conn_sd, msg + sent, strlen(msg), MSG_MORE);
+        size_t len_header = build_message(len_bad, "text/html", msg, NULL, bad_request);
+        //size_t len_header = build_message(len_bad, "text/html", msg, NULL, str_bad_request);
+        ssize_t s = 0;
+        size_t sent = 0;
 
-        if (s == -1) {
-            fprintf(stderr, "Error in send()\n");
-            return ERROR_SENDING_MESSAGE;
-        }
+        /************ Send headers **********************/
+        while (sent < len_header) {
 
-        sent += s;
-    }
-    /********************************************/
+            s = send(conn_sd, msg + sent, strlen(msg), MSG_MORE);
 
-    int retry = 5;
-
-    ssize_t v, w = 0;
-
-    while (retry > 0) {
-
-        while (len_bad - w > 0) {
-            v = write_block(conn_sd, bad_request + w, len_bad - w);
-            if (v == -1 && errno != EAGAIN) {
-                fprintf(stderr, "Error sending image\n");
+            if (s == -1) {
+                fprintf(stderr, "Error in send()\n");
                 return ERROR_SENDING_MESSAGE;
             }
 
-            w += v;
+            sent += s;
+        }
+        /********************************************/
+
+        int retry = 5;
+
+        ssize_t v, w = 0;
+
+        while (retry > 0) {
+
+            while (len_bad - w > 0) {
+                v = write_block(conn_sd, bad_request + w, len_bad - w);
+                if (v == -1 && errno != EAGAIN) {
+                    fprintf(stderr, "Error sending image\n");
+                    return ERROR_SENDING_MESSAGE;
+                }
+
+                w += v;
+            }
+
+            if ((w != len_bad) && (retry != 0)) {
+                retry--;
+                continue;
+            } else if ((w != len_bad) && (retry == 0))
+                return ERROR_SENDING_MESSAGE;
+            else if (w == len_bad)
+                break;
+
         }
 
-        if ((w != len_bad) && (retry != 0)) {
-            retry--;
-            continue;
-        }
-        else if ((w != len_bad) && (retry == 0))
-            return ERROR_SENDING_MESSAGE;
-        else if(w == len_bad)
-            break;
-
-    }
-
-    free(msg);
-
+        //free(msg);
+        //free(str_bad_request);
 }
 
 int send_service_unavailable(int conn_sd) {
 
-    char *msg = NULL;
-    msg = (char *) memory_alloc((size_t) 512 * sizeof(char));
-    msg[511] = '\0';
+        char msg[512];
 
-    char *str_service_unavailable = memory_alloc(strlen(service_unavailable) + 1);
-    memcpy(str_service_unavailable, service_unavailable, strlen(service_unavailable));
-    str_service_unavailable[strlen(service_unavailable)] = '\0';
-    size_t len_ser = strlen(service_unavailable) + 1;
+        //char *str_service_unavailable = memory_alloc(strlen(service_unavailable) + 1);
+        //memcpy(str_service_unavailable, service_unavailable, strlen(service_unavailable));
+        //str_service_unavailable[strlen(service_unavailable)] = '\0';
+        //size_t len_ser = strlen(service_unavailable) + 1;
+        size_t len_ser = strlen(service_unavailable) + 1;
 
-    size_t len_header = build_message(len_ser, "text/html", &msg, NULL, str_service_unavailable);
-    ssize_t s = 0;
-    size_t sent = 0;
+        //size_t len_header = build_message(len_ser, "text/html", msg, NULL, str_service_unavailable);
+        size_t len_header = build_message(len_ser, "text/html", msg, NULL, service_unavailable);
+        ssize_t s = 0;
+        size_t sent = 0;
 
-    /************ Send headers **********************/
-    while (sent < len_header) {
+        /************ Send headers **********************/
+        while (sent < len_header) {
 
-        s = send(conn_sd, msg + sent, strlen(msg), MSG_MORE);
+            s = send(conn_sd, msg + sent, strlen(msg), MSG_MORE);
 
-        if (s == -1) {
-            fprintf(stderr, "Error in send()\n");
-            return ERROR_SENDING_MESSAGE;
-        }
-
-        sent += s;
-    }
-    /********************************************/
-
-    int retry = 5;
-
-    ssize_t v, w = 0;
-
-    while (retry > 0) {
-
-        while (len_ser - w > 0) {
-            v = write_block(conn_sd, service_unavailable + w, len_ser - w);
-            if (v == -1 && errno != EAGAIN) {
-                fprintf(stderr, "Error sending image\n");
+            if (s == -1) {
+                fprintf(stderr, "Error in send()\n");
                 return ERROR_SENDING_MESSAGE;
             }
 
-            w += v;
+            sent += s;
+        }
+        /********************************************/
+
+        int retry = 5;
+
+        ssize_t v, w = 0;
+
+        while (retry > 0) {
+
+            while (len_ser - w > 0) {
+                v = write_block(conn_sd, service_unavailable + w, len_ser - w);
+                if (v == -1 && errno != EAGAIN) {
+                    fprintf(stderr, "Error sending image\n");
+                    return ERROR_SENDING_MESSAGE;
+                }
+
+                w += v;
+            }
+
+            if ((w != len_ser) && (retry != 0)) {
+                retry--;
+                continue;
+            } else if ((w != len_ser) && (retry == 0))
+                return ERROR_SENDING_MESSAGE;
+            else if (w == len_ser)
+                break;
+
         }
 
-        if ((w != len_ser) && (retry != 0)) {
-            retry--;
-            continue;
-        }
-        else if ((w != len_ser) && (retry == 0))
-            return ERROR_SENDING_MESSAGE;
-        else if(w == len_ser)
-            break;
-
-    }
+        //free(msg);
+        //free(str_service_unavailable);
 
 }
+

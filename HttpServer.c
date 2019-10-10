@@ -28,6 +28,8 @@ int main() {
     int ready;                                                                                                          /* Number of ready fd */
     max_descriptor = 1;                                                                                                 /* Number of descriptors to be checked */
 
+    int ee = 0;
+    
     socklen_t socklen;                                                                                                  /* Size of client's address*/
     struct sockaddr_in client_addr;                                                                                     /* Address of the client */
 
